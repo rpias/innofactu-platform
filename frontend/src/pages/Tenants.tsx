@@ -1,8 +1,45 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Copy, Plus, Search } from 'lucide-react'
+import { CheckCircle, Copy, Plus, Search, XCircle } from 'lucide-react'
 import { tenants as tenantsApi, plans as plansApi } from '../services/api'
 import type { Tenant, Plan } from '../types'
+
+/**
+ * Validación de RUT uruguayo — algoritmo módulo 11 DGI.
+ * Pesos aplicados de derecha a izquierda sobre los dígitos sin el verificador: 2,9,8,7,6,3,4,5 (cíclico).
+ * Dígito verificador = (11 - (suma % 11)) % 11. Si el resultado es 10 → RUT inválido.
+ */
+function validateRUT(raw: string): { valid: boolean; error?: string } {
+  const digits = raw.replace(/\D/g, '')
+  if (digits.length === 0) return { valid: true } // opcional, sin error si vacío
+  if (digits.length < 7 || digits.length > 12)
+    return { valid: false, error: 'El RUT debe tener entre 7 y 12 dígitos' }
+
+  const checkDigit = parseInt(digits[digits.length - 1])
+  const body = digits.slice(0, -1)
+  const weights = [2, 9, 8, 7, 6, 3, 4, 5]
+
+  let sum = 0
+  for (let i = body.length - 1; i >= 0; i--) {
+    sum += parseInt(body[i]) * weights[(body.length - 1 - i) % weights.length]
+  }
+
+  const remainder = sum % 11
+  if (remainder === 1) return { valid: false, error: 'RUT inválido (dígito verificador incorrecto)' }
+  const computed = remainder === 0 ? 0 : 11 - remainder
+
+  if (computed !== checkDigit)
+    return { valid: false, error: `Dígito verificador incorrecto (esperado: ${computed})` }
+
+  return { valid: true }
+}
+
+/** Formatea RUT mientras el usuario escribe: solo dígitos, máx 12, agrega guión antes del último dígito. */
+function formatRUT(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 12)
+  if (digits.length <= 1) return digits
+  return digits.slice(0, -1) + '-' + digits.slice(-1)
+}
 
 const STATUS_BADGE: Record<string, string> = {
   trial: 'badge-yellow',
@@ -171,6 +208,8 @@ function NewTenantModal({
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [rutError, setRutError] = useState('')
+  const [rutValid, setRutValid] = useState(false)
   const [credentials, setCredentials] = useState<AdminCredentials | null>(null)
   const [copied, setCopied] = useState(false)
   const pwRef = useRef<HTMLInputElement>(null)
@@ -184,9 +223,20 @@ function NewTenantModal({
     set('slug', slug)
   }
 
+  const handleRUTChange = (raw: string) => {
+    const formatted = formatRUT(raw)
+    set('rut', formatted)
+    const digits = formatted.replace(/\D/g, '')
+    if (digits.length === 0) { setRutError(''); setRutValid(false); return }
+    const result = validateRUT(digits)
+    if (result.valid) { setRutError(''); setRutValid(true) }
+    else { setRutError(result.error ?? ''); setRutValid(false) }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    if (rutError) return // bloquear submit si RUT inválido
     setLoading(true)
     try {
       const result = await tenantsApi.create({
@@ -309,7 +359,29 @@ function NewTenantModal({
               </div>
               <div className="form-group">
                 <label className="form-label">RUT</label>
-                <input value={form.rut} onChange={(e) => set('rut', e.target.value)} placeholder="12345678-9" />
+                <div style={{ position: 'relative' }}>
+                  <input
+                    value={form.rut}
+                    onChange={(e) => handleRUTChange(e.target.value)}
+                    placeholder="219876543-0"
+                    style={{
+                      paddingRight: 36,
+                      borderColor: rutError ? 'rgba(239,68,68,0.6)' : rutValid ? 'rgba(34,197,94,0.6)' : undefined,
+                    }}
+                  />
+                  {rutValid && (
+                    <CheckCircle size={16} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#22c55e' }} />
+                  )}
+                  {rutError && (
+                    <XCircle size={16} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#ef4444' }} />
+                  )}
+                </div>
+                {rutError && (
+                  <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: 4 }}>{rutError}</div>
+                )}
+                {rutValid && (
+                  <div style={{ fontSize: '0.75rem', color: '#22c55e', marginTop: 4 }}>RUT válido ✓</div>
+                )}
               </div>
               <div className="form-group">
                 <label className="form-label">Email del administrador *</label>
