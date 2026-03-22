@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search } from 'lucide-react'
+import { Copy, Plus, Search } from 'lucide-react'
 import { tenants as tenantsApi, plans as plansApi } from '../services/api'
 import type { Tenant, Plan } from '../types'
 
@@ -130,11 +130,17 @@ export default function Tenants() {
         <NewTenantModal
           plans={planList}
           onClose={() => setShowModal(false)}
-          onCreated={() => { setShowModal(false); load() }}
+          onCreated={() => { load() }}
         />
       )}
     </div>
   )
+}
+
+interface AdminCredentials {
+  email: string
+  password: string
+  note: string
 }
 
 function NewTenantModal({
@@ -165,6 +171,9 @@ function NewTenantModal({
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [credentials, setCredentials] = useState<AdminCredentials | null>(null)
+  const [copied, setCopied] = useState(false)
+  const pwRef = useRef<HTMLInputElement>(null)
 
   const set = (k: string, v: string | number) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -180,11 +189,17 @@ function NewTenantModal({
     setError('')
     setLoading(true)
     try {
-      await tenantsApi.create({
+      const result = await tenantsApi.create({
         ...form,
         plan_id: Number(form.plan_id),
       })
-      onCreated()
+      // Show credentials step if present
+      if (result?.admin_credentials) {
+        setCredentials(result.admin_credentials)
+        onCreated()
+      } else {
+        onClose()
+      }
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } }
       setError(e?.response?.data?.error ?? 'Error creando empresa')
@@ -193,63 +208,144 @@ function NewTenantModal({
     }
   }
 
+  const handleCopy = () => {
+    if (credentials) {
+      navigator.clipboard.writeText(credentials.password)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  const handleClose = () => {
+    if (credentials) {
+      onClose()
+    } else {
+      onClose()
+    }
+  }
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={credentials ? undefined : handleClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h2 className="modal-title">Nueva Empresa</h2>
+        {credentials ? (
+          // Step 2: Show credentials
+          <>
+            <h2 className="modal-title">Credenciales generadas</h2>
+            <div style={{
+              background: 'rgba(99,102,241,0.1)',
+              border: '1px solid rgba(99,102,241,0.3)',
+              borderRadius: 10,
+              padding: '16px',
+              marginBottom: 16,
+            }}>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 4 }}>Email de administrador</div>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{credentials.email}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 4 }}>Contraseña temporal</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    ref={pwRef}
+                    readOnly
+                    value={credentials.password}
+                    style={{
+                      flex: 1,
+                      background: 'var(--input-bg)',
+                      border: '1px solid var(--input-border)',
+                      borderRadius: 6,
+                      padding: '6px 10px',
+                      fontFamily: 'monospace',
+                      fontSize: '0.9rem',
+                      color: 'var(--text-primary)',
+                    }}
+                  />
+                  <button
+                    className="btn btn-ghost"
+                    onClick={handleCopy}
+                    style={{ padding: '6px 10px', fontSize: '0.78rem' }}
+                  >
+                    <Copy size={13} /> {copied ? 'Copiado!' : 'Copiar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div style={{
+              background: 'rgba(245,158,11,0.1)',
+              border: '1px solid rgba(245,158,11,0.3)',
+              borderRadius: 8,
+              padding: '10px 14px',
+              marginBottom: 20,
+              fontSize: '0.8rem',
+              color: '#d97706',
+            }}>
+              Esta contraseña solo se muestra una vez. Compartila de forma segura con el administrador del tenant.
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn btn-primary" onClick={handleClose}>
+                Entendido, cerrar
+              </button>
+            </div>
+          </>
+        ) : (
+          // Step 1: Create form
+          <>
+            <h2 className="modal-title">Nueva Empresa</h2>
 
-        {error && (
-          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '8px 12px', marginBottom: 14, fontSize: '0.8rem', color: '#ef4444' }}>
-            {error}
-          </div>
+            {error && (
+              <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '8px 12px', marginBottom: 14, fontSize: '0.8rem', color: '#ef4444' }}>
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit}>
+              <div className="form-group">
+                <label className="form-label">Nombre de la empresa *</label>
+                <input value={form.company_name} onChange={(e) => handleNameChange(e.target.value)} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Slug (identificador único) *</label>
+                <input value={form.slug} onChange={(e) => set('slug', e.target.value)} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">RUT</label>
+                <input value={form.rut} onChange={(e) => set('rut', e.target.value)} placeholder="12345678-9" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Email del administrador *</label>
+                <input type="email" value={form.admin_email} onChange={(e) => set('admin_email', e.target.value)} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Nombre del administrador</label>
+                <input value={form.admin_name} onChange={(e) => set('admin_name', e.target.value)} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-group">
+                  <label className="form-label">Plan *</label>
+                  <select value={form.plan_id} onChange={(e) => set('plan_id', Number(e.target.value))}>
+                    {plans.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Estado inicial</label>
+                  <select value={form.status} onChange={(e) => set('status', e.target.value as 'trial' | 'active')}>
+                    <option value="trial">Trial</option>
+                    <option value="active">Activo</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+                <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
+                <button type="submit" className="btn btn-primary" disabled={loading}>
+                  {loading ? 'Creando...' : 'Crear empresa'}
+                </button>
+              </div>
+            </form>
+          </>
         )}
-
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label className="form-label">Nombre de la empresa *</label>
-            <input value={form.company_name} onChange={(e) => handleNameChange(e.target.value)} required />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Slug (identificador único) *</label>
-            <input value={form.slug} onChange={(e) => set('slug', e.target.value)} required />
-          </div>
-          <div className="form-group">
-            <label className="form-label">RUT</label>
-            <input value={form.rut} onChange={(e) => set('rut', e.target.value)} placeholder="12345678-9" />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Email del administrador *</label>
-            <input type="email" value={form.admin_email} onChange={(e) => set('admin_email', e.target.value)} required />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Nombre del administrador</label>
-            <input value={form.admin_name} onChange={(e) => set('admin_name', e.target.value)} />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div className="form-group">
-              <label className="form-label">Plan *</label>
-              <select value={form.plan_id} onChange={(e) => set('plan_id', Number(e.target.value))}>
-                {plans.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Estado inicial</label>
-              <select value={form.status} onChange={(e) => set('status', e.target.value as 'trial' | 'active')}>
-                <option value="trial">Trial</option>
-                <option value="active">Activo</option>
-              </select>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Creando...' : 'Crear empresa'}
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   )

@@ -68,7 +68,7 @@ export const tenants = {
   getOne: (id: string): Promise<Tenant> =>
     api.get(`/tenants/${id}`).then((r) => r.data),
 
-  create: (data: Partial<Tenant>): Promise<Tenant> =>
+  create: (data: Partial<Tenant>): Promise<{ tenant: Tenant; admin_credentials?: { email: string; password: string; note: string } }> =>
     api.post('/tenants', data).then((r) => r.data),
 
   update: (id: string, data: Partial<Tenant>): Promise<Tenant> =>
@@ -82,6 +82,9 @@ export const tenants = {
 
   getStats: (): Promise<TenantStats> =>
     api.get('/tenants/stats').then((r) => r.data),
+
+  resetAdminPassword: (id: string): Promise<{ email: string; password: string; note: string }> =>
+    api.post(`/tenants/${id}/reset-admin-password`).then((r) => r.data),
 }
 
 // Support

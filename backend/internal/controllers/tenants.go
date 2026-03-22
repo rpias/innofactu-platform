@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"platform/internal/database"
 	"platform/internal/models"
+	"platform/internal/utils"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -33,8 +35,13 @@ func erpInternalKey() string {
 	return key
 }
 
+// provisionInERPResult holds the parsed response from ERP provisioning
+type provisionInERPResult struct {
+	AdminPassword string
+}
+
 // provisionInERP llama al ERP backend para crear el schema y tenant allí
-func provisionInERP(tenant models.Tenant, planCode string, adminPassword string) error {
+func provisionInERP(tenant models.Tenant, planCode string, adminPassword string) (*provisionInERPResult, error) {
 	payload := map[string]interface{}{
 		"company_name":   tenant.CompanyName,
 		"slug":           tenant.Slug,
@@ -51,22 +58,34 @@ func provisionInERP(tenant models.Tenant, planCode string, adminPassword string)
 	body, _ := json.Marshal(payload)
 	req, err := http.NewRequest(http.MethodPost, erpInternalURL()+"/provision", bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("building request: %w", err)
+		return nil, fmt.Errorf("building request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Key", erpInternalKey())
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("calling ERP provision: %w", err)
+		return nil, fmt.Errorf("calling ERP provision: %w", err)
 	}
 	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+
 	if resp.StatusCode >= 400 {
 		var errBody map[string]string
-		json.NewDecoder(resp.Body).Decode(&errBody)
-		return fmt.Errorf("ERP provision error %d: %s", resp.StatusCode, errBody["error"])
+		json.Unmarshal(respBody, &errBody)
+		return nil, fmt.Errorf("ERP provision error %d: %s", resp.StatusCode, errBody["error"])
 	}
-	return nil
+
+	// Parse response to capture admin_password if ERP generated it
+	var parsed map[string]interface{}
+	json.Unmarshal(respBody, &parsed)
+
+	result := &provisionInERPResult{}
+	if pw, ok := parsed["admin_password"].(string); ok && pw != "" {
+		result.AdminPassword = pw
+	}
+	return result, nil
 }
 
 type TenantStats struct {
@@ -169,23 +188,40 @@ func CreateTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Provisionar en el ERP (schema PostgreSQL + tenant record allá)
+	// Generar contraseña segura si no viene en el body
 	adminPwd := body.AdminPassword
+	generatedPassword := ""
 	if adminPwd == "" {
-		adminPwd = "Innofactu2026!"
+		generatedPassword = utils.GenerateSecurePassword(16)
+		adminPwd = generatedPassword
 	}
-	if err := provisionInERP(tenant, planCode, adminPwd); err != nil {
+
+	// Provisionar en el ERP (schema PostgreSQL + tenant record allá)
+	finalPassword := adminPwd
+	erpResult, err := provisionInERP(tenant, planCode, adminPwd)
+	if err != nil {
 		log.Printf("Warning: ERP provisioning failed for %s: %v", tenant.Slug, err)
 		// No bloqueamos — el admin puede reprovisionarlo
 	} else {
 		log.Printf("Tenant %s provisioned in ERP successfully", tenant.Slug)
+		// If ERP generated a password, use that one
+		if erpResult != nil && erpResult.AdminPassword != "" {
+			finalPassword = erpResult.AdminPassword
+		}
 	}
 
 	database.DB.Preload("Plan").First(&tenant, "id = ?", tenant.ID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(tenant)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tenant": tenant,
+		"admin_credentials": map[string]interface{}{
+			"email":    tenant.AdminEmail,
+			"password": finalPassword,
+			"note":     "Esta contraseña solo se muestra una vez.",
+		},
+	})
 }
 
 func slugifyTenant(s string) string {
@@ -274,6 +310,72 @@ func GetTenantStats(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(stats)
 }
 
+// ResetAdminPassword — POST /api/tenants/{id}/reset-admin-password
+// Generates a new secure password and resets it via ERP internal endpoint
+func ResetAdminPassword(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	var tenant models.Tenant
+	if err := database.DB.First(&tenant, "id = ?", id).Error; err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Empresa no encontrada"})
+		return
+	}
+
+	if tenant.AdminEmail == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "El tenant no tiene email de administrador configurado"})
+		return
+	}
+
+	schema := tenant.DBSchema
+	if schema == "" {
+		schema = "t_" + strings.ReplaceAll(tenant.Slug, "-", "_")
+	}
+
+	newPassword := utils.GenerateSecurePassword(16)
+
+	// Call ERP internal endpoint to reset
+	payload := map[string]interface{}{
+		"schema":       schema,
+		"email":        tenant.AdminEmail,
+		"new_password": newPassword,
+	}
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequest(http.MethodPost, erpInternalURL()+"/reset-user-password", bytes.NewReader(body))
+	if err != nil {
+		http.Error(w, "Error building request", http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Key", erpInternalKey())
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "Error contacting ERP", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		var errBody map[string]string
+		json.NewDecoder(resp.Body).Decode(&errBody)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Error reseteando contraseña: " + errBody["error"]})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"email":    tenant.AdminEmail,
+		"password": newPassword,
+		"note":     "Esta contraseña solo se muestra una vez.",
+	})
+}
+
 func TenantRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.Use(AuthRequired)
@@ -284,5 +386,6 @@ func TenantRoutes() chi.Router {
 	r.Put("/{id}", UpdateTenant)
 	r.Post("/{id}/suspend", SuspendTenant)
 	r.Post("/{id}/reactivate", ReactivateTenant)
+	r.Post("/{id}/reset-admin-password", ResetAdminPassword)
 	return r
 }

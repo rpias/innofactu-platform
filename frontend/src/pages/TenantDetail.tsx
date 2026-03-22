@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Copy, KeyRound, RefreshCw } from 'lucide-react'
 import { tenants as tenantsApi, plans as plansApi, support as supportApi } from '../services/api'
 import type { Tenant, Plan, SupportTicket } from '../types'
 
@@ -29,6 +29,9 @@ export default function TenantDetail() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [editForm, setEditForm] = useState<Partial<Tenant>>({})
+  const [resetCredentials, setResetCredentials] = useState<{ email: string; password: string; note: string } | null>(null)
+  const [resetCopied, setResetCopied] = useState(false)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -75,6 +78,17 @@ export default function TenantDetail() {
     setEditForm(updated)
   }
 
+  const handleResetAdminPassword = async () => {
+    if (!id) return
+    setShowResetConfirm(false)
+    try {
+      const result = await tenantsApi.resetAdminPassword(id)
+      setResetCredentials(result)
+    } catch {
+      alert('Error al resetear la contraseña. Intentá nuevamente.')
+    }
+  }
+
   return (
     <div>
       {/* Header */}
@@ -93,6 +107,14 @@ export default function TenantDetail() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            className="btn btn-ghost"
+            onClick={() => setShowResetConfirm(true)}
+            style={{ fontSize: '0.78rem' }}
+            title="Resetear contraseña del administrador"
+          >
+            <KeyRound size={13} /> Resetear contraseña admin
+          </button>
           {tenant.status !== 'suspended' && tenant.status !== 'cancelled' && (
             <button className="btn btn-danger" onClick={handleSuspend} style={{ fontSize: '0.78rem' }}>
               Suspender
@@ -251,6 +273,109 @@ export default function TenantDetail() {
           <UsageStat label="Almacenamiento" value={tenant.usage_storage_mb} limit={tenant.plan?.max_storage_mb} unit=" MB" />
         </div>
       )}
+
+      {/* Modal — Confirm reset password */}
+      {showResetConfirm && (
+        <div className="modal-overlay" onClick={() => setShowResetConfirm(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <h2 className="modal-title">Resetear contraseña admin</h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 20 }}>
+              ¿Resetear la contraseña del administrador de <strong>{tenant.company_name}</strong>?
+              Se generará una nueva contraseña temporal.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => setShowResetConfirm(false)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={handleResetAdminPassword}>Confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal — Show reset credentials */}
+      {resetCredentials && (
+        <ResetPasswordModal
+          credentials={resetCredentials}
+          onClose={() => setResetCredentials(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function ResetPasswordModal({
+  credentials,
+  onClose,
+}: {
+  credentials: { email: string; password: string; note: string }
+  onClose: () => void
+}) {
+  const [copied, setCopied] = useState(false)
+  const pwRef = useRef<HTMLInputElement>(null)
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(credentials.password)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+        <h2 className="modal-title">Nueva contraseña generada</h2>
+        <div style={{
+          background: 'rgba(99,102,241,0.1)',
+          border: '1px solid rgba(99,102,241,0.3)',
+          borderRadius: 10,
+          padding: '16px',
+          marginBottom: 16,
+        }}>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 4 }}>Email de administrador</div>
+            <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{credentials.email}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 4 }}>Nueva contraseña temporal</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                ref={pwRef}
+                readOnly
+                value={credentials.password}
+                style={{
+                  flex: 1,
+                  background: 'var(--input-bg)',
+                  border: '1px solid var(--input-border)',
+                  borderRadius: 6,
+                  padding: '6px 10px',
+                  fontFamily: 'monospace',
+                  fontSize: '0.9rem',
+                  color: 'var(--text-primary)',
+                }}
+              />
+              <button
+                className="btn btn-ghost"
+                onClick={handleCopy}
+                style={{ padding: '6px 10px', fontSize: '0.78rem' }}
+              >
+                <Copy size={13} /> {copied ? 'Copiado!' : 'Copiar'}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div style={{
+          background: 'rgba(245,158,11,0.1)',
+          border: '1px solid rgba(245,158,11,0.3)',
+          borderRadius: 8,
+          padding: '10px 14px',
+          marginBottom: 20,
+          fontSize: '0.8rem',
+          color: '#d97706',
+        }}>
+          Esta contraseña solo se muestra una vez. Compartila de forma segura con el administrador.
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button className="btn btn-primary" onClick={onClose}>Entendido, cerrar</button>
+        </div>
+      </div>
     </div>
   )
 }
