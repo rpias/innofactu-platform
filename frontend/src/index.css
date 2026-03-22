@@ -1,0 +1,95 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; }
+
+:root {
+  --sidebar-bg: #1e293b;
+  --sidebar-border: #334155;
+  --card-bg: #1e293b;
+  --card-border: #334155;
+  --accent: #6366f1;
+  --accent-light: rgba(99,102,241,0.15);
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --input-bg: #0f172a;
+  --input-border: #334155;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
+}
+
+/* Cards */
+.card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 20px; }
+.card-sm { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; padding: 14px; }
+
+/* Inputs */
+input, select, textarea {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 7px;
+  padding: 8px 12px;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  outline: none;
+  width: 100%;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+
+/* Buttons */
+.btn { padding: 8px 16px; border-radius: 7px; border: none; cursor: pointer; font-size: 0.85rem; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; transition: opacity 0.15s; }
+.btn:hover { opacity: 0.85; }
+.btn-primary { background: var(--accent); color: white; }
+.btn-success { background: var(--success); color: white; }
+.btn-danger { background: var(--danger); color: white; }
+.btn-warning { background: var(--warning); color: #0f172a; }
+.btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--card-border); }
+
+/* Badges */
+.badge { padding: 3px 9px; border-radius: 99px; font-size: 0.72rem; font-weight: 700; display: inline-block; }
+.badge-green { background: rgba(16,185,129,0.15); color: #10b981; }
+.badge-yellow { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.badge-red { background: rgba(239,68,68,0.15); color: #ef4444; }
+.badge-blue { background: rgba(59,130,246,0.15); color: #3b82f6; }
+.badge-gray { background: rgba(100,116,139,0.15); color: #94a3b8; }
+.badge-purple { background: rgba(99,102,241,0.15); color: #818cf8; }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; }
+th { padding: 10px 14px; text-align: left; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); border-bottom: 1px solid var(--card-border); }
+td { padding: 12px 14px; font-size: 0.85rem; border-bottom: 1px solid rgba(51,65,85,0.5); }
+tr:hover td { background: rgba(99,102,241,0.04); }
+
+/* Stat cards */
+.stat-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 18px 20px; }
+.stat-label { font-size: 0.72rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.stat-value { font-size: 1.8rem; font-weight: 800; color: var(--text-primary); margin: 4px 0; }
+.stat-sub { font-size: 0.78rem; color: var(--text-secondary); }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal {
+  background: var(--card-bg); border: 1px solid var(--card-border);
+  border-radius: 14px; padding: 28px; width: 100%; max-width: 480px;
+  max-height: 90vh; overflow-y: auto;
+}
+.modal-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 20px; color: var(--text-primary); }
+
+/* Form group */
+.form-group { margin-bottom: 14px; }
+.form-label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 5px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--card-border); margin-bottom: 20px; }
+.tab-btn { padding: 8px 16px; background: none; border: none; cursor: pointer; font-size: 0.85rem; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s; }
+.tab-btn:hover { color: var(--text-primary); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
