@@ -1,35 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle, Copy, Plus, Search, XCircle } from 'lucide-react'
-import { tenants as tenantsApi, plans as plansApi } from '../services/api'
+import { Building2, CheckCircle, Copy, Plus, Search, XCircle } from 'lucide-react'
+import api, { tenants as tenantsApi, plans as plansApi } from '../services/api'
 import type { Tenant, Plan } from '../types'
 
 /**
- * Validación de RUT uruguayo — algoritmo módulo 11 DGI.
- * Pesos aplicados de derecha a izquierda sobre los dígitos sin el verificador: 2,9,8,7,6,3,4,5 (cíclico).
- * Dígito verificador = (11 - (suma % 11)) % 11. Si el resultado es 10 → RUT inválido.
+ * Validación de RUT uruguayo — algoritmo oficial DGI módulo 11.
+ * Pesos [4,3,2,9,8,7,6,5,4,3,2] aplicados de izquierda a derecha sobre los primeros 11 dígitos.
+ * remainder=0 → check=1 | remainder=1 → check=0 | else → check=11-remainder
  */
 function validateRUT(raw: string): { valid: boolean; error?: string } {
   const digits = raw.replace(/\D/g, '')
-  if (digits.length === 0) return { valid: true } // opcional, sin error si vacío
-  if (digits.length < 7 || digits.length > 12)
-    return { valid: false, error: 'El RUT debe tener entre 7 y 12 dígitos' }
+  if (digits.length === 0) return { valid: true }
+  if (digits.length !== 12) return { valid: false, error: 'El RUT uruguayo debe tener 12 dígitos' }
 
-  const checkDigit = parseInt(digits[digits.length - 1])
-  const body = digits.slice(0, -1)
-  const weights = [2, 9, 8, 7, 6, 3, 4, 5]
-
+  const weights = [4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
   let sum = 0
-  for (let i = body.length - 1; i >= 0; i--) {
-    sum += parseInt(body[i]) * weights[(body.length - 1 - i) % weights.length]
-  }
+  for (let i = 0; i < 11; i++) sum += parseInt(digits[i]) * weights[i]
 
-  const remainder = sum % 11
-  if (remainder === 1) return { valid: false, error: 'RUT inválido (dígito verificador incorrecto)' }
-  const computed = remainder === 0 ? 0 : 11 - remainder
-
-  if (computed !== checkDigit)
-    return { valid: false, error: `Dígito verificador incorrecto (esperado: ${computed})` }
+  const rem = sum % 11
+  const check = rem === 0 ? 1 : rem === 1 ? 0 : 11 - rem
+  if (check !== parseInt(digits[11]))
+    return { valid: false, error: `Dígito verificador incorrecto (esperado: ${check})` }
 
   return { valid: true }
 }
@@ -210,6 +202,8 @@ function NewTenantModal({
   const [error, setError] = useState('')
   const [rutError, setRutError] = useState('')
   const [rutValid, setRutValid] = useState(false)
+  const [dgiLoading, setDgiLoading] = useState(false)
+  const [dgiError, setDgiError] = useState('')
   const [credentials, setCredentials] = useState<AdminCredentials | null>(null)
   const [copied, setCopied] = useState(false)
   const pwRef = useRef<HTMLInputElement>(null)
@@ -226,11 +220,33 @@ function NewTenantModal({
   const handleRUTChange = (raw: string) => {
     const formatted = formatRUT(raw)
     set('rut', formatted)
+    setDgiError('')
     const digits = formatted.replace(/\D/g, '')
     if (digits.length === 0) { setRutError(''); setRutValid(false); return }
     const result = validateRUT(digits)
     if (result.valid) { setRutError(''); setRutValid(true) }
     else { setRutError(result.error ?? ''); setRutValid(false) }
+  }
+
+  const buscarEnDGI = async () => {
+    const rut = form.rut.replace(/\D/g, '')
+    setDgiLoading(true)
+    setDgiError('')
+    try {
+      const res = await api.get(`/dgi/rut?rut=${rut}`)
+      const empresa = res.data
+      // Auto-fill company name and slug from DGI data
+      const nombre = empresa.denominacion as string
+      const slug = nombre.toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove accents
+        .replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+      setForm((f) => ({ ...f, company_name: nombre, slug }))
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: string } } }
+      setDgiError(e?.response?.data?.error ?? 'Error consultando DGI')
+    } finally {
+      setDgiLoading(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -359,28 +375,46 @@ function NewTenantModal({
               </div>
               <div className="form-group">
                 <label className="form-label">RUT</label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    value={form.rut}
-                    onChange={(e) => handleRUTChange(e.target.value)}
-                    placeholder="219876543-0"
-                    style={{
-                      paddingRight: 36,
-                      borderColor: rutError ? 'rgba(239,68,68,0.6)' : rutValid ? 'rgba(34,197,94,0.6)' : undefined,
-                    }}
-                  />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <input
+                      value={form.rut}
+                      onChange={(e) => handleRUTChange(e.target.value)}
+                      placeholder="219876543210"
+                      style={{
+                        paddingRight: 36,
+                        borderColor: rutError ? 'rgba(239,68,68,0.6)' : rutValid ? 'rgba(34,197,94,0.6)' : undefined,
+                      }}
+                    />
+                    {rutValid && !rutError && (
+                      <CheckCircle size={16} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#22c55e' }} />
+                    )}
+                    {rutError && (
+                      <XCircle size={16} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#ef4444' }} />
+                    )}
+                  </div>
                   {rutValid && (
-                    <CheckCircle size={16} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#22c55e' }} />
-                  )}
-                  {rutError && (
-                    <XCircle size={16} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#ef4444' }} />
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={buscarEnDGI}
+                      disabled={dgiLoading}
+                      style={{ whiteSpace: 'nowrap', fontSize: '0.78rem', padding: '0 12px' }}
+                      title="Buscar datos de la empresa en DGI"
+                    >
+                      <Building2 size={13} />
+                      {dgiLoading ? 'Buscando...' : 'Buscar en DGI'}
+                    </button>
                   )}
                 </div>
                 {rutError && (
                   <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: 4 }}>{rutError}</div>
                 )}
-                {rutValid && (
+                {rutValid && !dgiError && (
                   <div style={{ fontSize: '0.75rem', color: '#22c55e', marginTop: 4 }}>RUT válido ✓</div>
+                )}
+                {dgiError && (
+                  <div style={{ fontSize: '0.75rem', color: '#f59e0b', marginTop: 4 }}>⚠ DGI: {dgiError}</div>
                 )}
               </div>
               <div className="form-group">

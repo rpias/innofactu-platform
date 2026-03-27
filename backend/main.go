@@ -50,6 +50,7 @@ func main() {
 		r.Mount("/tenants", controllers.TenantRoutes())
 		r.Mount("/support", controllers.SupportRoutes())
 		r.Mount("/dashboard", controllers.DashboardRoutes())
+		r.Get("/dgi/rut", controllers.ConsultarRUT)
 	})
 
 	// Health check
