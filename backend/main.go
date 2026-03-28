@@ -34,6 +34,7 @@ func main() {
 		AllowedOrigins: []string{
 			"http://localhost:5174",
 			"http://localhost:5173",
+			"http://*",
 			"https://*",
 		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
