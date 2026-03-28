@@ -17,11 +17,15 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// erpInternalURL devuelve la URL base del ERP backend interno
+// erpInternalURL devuelve la URL base del ERP backend interno (siempre termina en /internal)
 func erpInternalURL() string {
 	url := os.Getenv("ERP_INTERNAL_URL")
 	if url == "" {
-		url = "http://localhost:8080/internal"
+		url = "http://localhost:8080"
+	}
+	url = strings.TrimRight(url, "/")
+	if !strings.HasSuffix(url, "/internal") {
+		url += "/internal"
 	}
 	return url
 }

@@ -32,6 +32,8 @@ export default function TenantDetail() {
   const [resetCredentials, setResetCredentials] = useState<{ email: string; password: string; note: string } | null>(null)
   const [resetCopied, setResetCopied] = useState(false)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [showSuspendConfirm, setShowSuspendConfirm] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
 
   useEffect(() => {
     if (!id) return
@@ -63,7 +65,8 @@ export default function TenantDetail() {
   }
 
   const handleSuspend = async () => {
-    if (!id || !confirm('¿Confirma suspender esta empresa?')) return
+    if (!id) return
+    setShowSuspendConfirm(false)
     await tenantsApi.suspend(id)
     const updated = await tenantsApi.getOne(id)
     setTenant(updated)
@@ -85,7 +88,7 @@ export default function TenantDetail() {
       const result = await tenantsApi.resetAdminPassword(id)
       setResetCredentials(result)
     } catch {
-      alert('Error al resetear la contraseña. Intentá nuevamente.')
+      setErrorMsg('Error al resetear la contraseña. Intentá nuevamente.')
     }
   }
 
@@ -116,7 +119,7 @@ export default function TenantDetail() {
             <KeyRound size={13} /> Resetear contraseña admin
           </button>
           {tenant.status !== 'suspended' && tenant.status !== 'cancelled' && (
-            <button className="btn btn-danger" onClick={handleSuspend} style={{ fontSize: '0.78rem' }}>
+            <button className="btn btn-danger" onClick={() => setShowSuspendConfirm(true)} style={{ fontSize: '0.78rem' }}>
               Suspender
             </button>
           )}
@@ -127,6 +130,21 @@ export default function TenantDetail() {
           )}
         </div>
       </div>
+
+      {/* Error message */}
+      {errorMsg && (
+        <div style={{
+          background: 'rgba(239,68,68,0.1)',
+          border: '1px solid rgba(239,68,68,0.3)',
+          borderRadius: 8,
+          padding: '10px 14px',
+          marginBottom: 16,
+          fontSize: '0.83rem',
+          color: '#ef4444',
+        }}>
+          {errorMsg}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="tabs">
@@ -271,6 +289,22 @@ export default function TenantDetail() {
           <UsageStat label="Facturas este mes" value={tenant.usage_invoices_month} limit={tenant.plan?.max_invoices_per_month} unit="" />
           <UsageStat label="Usuarios activos" value={tenant.usage_users} limit={tenant.plan?.max_users} unit="" />
           <UsageStat label="Almacenamiento" value={tenant.usage_storage_mb} limit={tenant.plan?.max_storage_mb} unit=" MB" />
+        </div>
+      )}
+
+      {/* Modal — Confirm suspend */}
+      {showSuspendConfirm && (
+        <div className="modal-overlay" onClick={() => setShowSuspendConfirm(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <h2 className="modal-title">Suspender empresa</h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 20 }}>
+              ¿Confirmás suspender <strong>{tenant.company_name}</strong>? El administrador no podrá ingresar hasta que la reactives.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost" onClick={() => setShowSuspendConfirm(false)}>Cancelar</button>
+              <button className="btn btn-danger" onClick={handleSuspend}>Suspender</button>
+            </div>
+          </div>
         </div>
       )}
 
