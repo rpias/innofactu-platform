@@ -347,7 +347,12 @@ function ResetPasswordModal({
   const pwRef = useRef<HTMLInputElement>(null)
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(credentials.password)
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(credentials.password)
+    } else if (pwRef.current) {
+      pwRef.current.select()
+      document.execCommand('copy')
+    }
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
