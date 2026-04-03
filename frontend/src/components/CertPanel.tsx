@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ShieldCheck, ShieldAlert, ShieldX, Shield, Upload, Trash2, Clock, ChevronDown, ChevronUp, Building2, User } from "lucide-react";
+import { ShieldCheck, ShieldAlert, ShieldOff, Shield, Upload, Clock, ChevronDown, ChevronUp, Building2, User } from "lucide-react";
 import type { CertStatus, CertHistoryEntry } from "../types";
 
 interface CertPanelProps {
@@ -13,7 +13,7 @@ const STATUS_CONFIG = {
   ok:       { icon: ShieldCheck, color: "#16a34a", bg: "#f0fdf4", label: "Vigente" },
   warning:  { icon: ShieldAlert, color: "#d97706", bg: "#fffbeb", label: "Por vencer" },
   critical: { icon: ShieldAlert, color: "#dc2626", bg: "#fef2f2", label: "Vence pronto" },
-  expired:  { icon: ShieldX,     color: "#dc2626", bg: "#fef2f2", label: "Vencido" },
+  expired:  { icon: ShieldOff,   color: "#dc2626", bg: "#fef2f2", label: "Vencido" },
 } as const;
 
 function fmtDate(iso?: string) {
