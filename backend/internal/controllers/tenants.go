@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -380,6 +381,115 @@ func ResetAdminPassword(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ── Certificado DGI (proxies al ERP interno) ─────────────────────────────────
+
+// GetTenantCert devuelve el estado del cert de un tenant vía ERP interno.
+func GetTenantCert(w http.ResponseWriter, r *http.Request) {
+	tenantID := chi.URLParam(r, "id")
+	var tenant models.Tenant
+	if err := database.DB.Where("id = ?", tenantID).First(&tenant).Error; err != nil {
+		http.Error(w, "tenant no encontrado", http.StatusNotFound)
+		return
+	}
+	schema := "t_" + strings.ReplaceAll(tenant.Slug, "-", "_")
+
+	req, _ := http.NewRequest("GET", erpInternalURL()+"/cert/status?schema="+schema, nil)
+	req.Header.Set("X-Internal-Key", erpInternalKey())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "error al contactar ERP: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
+}
+
+// UploadTenantCert permite al platform admin subir un cert para cualquier tenant.
+// Multipart: campo "cert" (archivo .pfx) + campo "password" + campo "notes"
+func UploadTenantCert(w http.ResponseWriter, r *http.Request) {
+	tenantID := chi.URLParam(r, "id")
+	var tenant models.Tenant
+	if err := database.DB.Where("id = ?", tenantID).First(&tenant).Error; err != nil {
+		http.Error(w, "tenant no encontrado", http.StatusNotFound)
+		return
+	}
+	schema := "t_" + strings.ReplaceAll(tenant.Slug, "-", "_")
+
+	if err := r.ParseMultipartForm(2 << 20); err != nil {
+		http.Error(w, "archivo demasiado grande (máx 2MB)", http.StatusBadRequest)
+		return
+	}
+	file, _, err := r.FormFile("cert")
+	if err != nil {
+		http.Error(w, "campo 'cert' requerido", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+	pfxBytes, err := io.ReadAll(file)
+	if err != nil {
+		http.Error(w, "error al leer el archivo", http.StatusInternalServerError)
+		return
+	}
+
+	password := r.FormValue("password")
+	notes := r.FormValue("notes")
+
+	// Determinar quién sube (email del admin de platform desde contexto)
+	uploadedBy := "platform-admin"
+	if email, ok := r.Context().Value(contextKey("user_email")).(string); ok && email != "" {
+		uploadedBy = email
+	}
+
+	body := map[string]string{
+		"schema":        schema,
+		"cert_b64_raw":  base64.StdEncoding.EncodeToString(pfxBytes),
+		"cert_password": password,
+		"uploaded_by":   uploadedBy,
+		"notes":         notes,
+	}
+	bodyJSON, _ := json.Marshal(body)
+
+	req, _ := http.NewRequest("POST", erpInternalURL()+"/cert", bytes.NewReader(bodyJSON))
+	req.Header.Set("X-Internal-Key", erpInternalKey())
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "error al contactar ERP: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
+}
+
+// GetTenantCertHistory devuelve el historial de certs de un tenant.
+func GetTenantCertHistory(w http.ResponseWriter, r *http.Request) {
+	tenantID := chi.URLParam(r, "id")
+	var tenant models.Tenant
+	if err := database.DB.Where("id = ?", tenantID).First(&tenant).Error; err != nil {
+		http.Error(w, "tenant no encontrado", http.StatusNotFound)
+		return
+	}
+	schema := "t_" + strings.ReplaceAll(tenant.Slug, "-", "_")
+
+	req, _ := http.NewRequest("GET", erpInternalURL()+"/cert/history?schema="+schema, nil)
+	req.Header.Set("X-Internal-Key", erpInternalKey())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "error al contactar ERP: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
+}
+
+
 func TenantRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.Use(AuthRequired)
@@ -391,5 +501,9 @@ func TenantRoutes() chi.Router {
 	r.Post("/{id}/suspend", SuspendTenant)
 	r.Post("/{id}/reactivate", ReactivateTenant)
 	r.Post("/{id}/reset-admin-password", ResetAdminPassword)
+	// Certificados DGI
+	r.Get("/{id}/cert", GetTenantCert)
+	r.Post("/{id}/cert", UploadTenantCert)
+	r.Get("/{id}/cert/history", GetTenantCertHistory)
 	return r
 }

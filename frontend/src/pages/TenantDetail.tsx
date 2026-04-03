@@ -3,8 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Copy, KeyRound, RefreshCw } from 'lucide-react'
 import { tenants as tenantsApi, plans as plansApi, support as supportApi } from '../services/api'
 import type { Tenant, Plan, SupportTicket } from '../types'
+import CertPanel from '../components/CertPanel'
 
-type Tab = 'info' | 'soporte' | 'suscripcion' | 'uso'
+type Tab = 'info' | 'soporte' | 'suscripcion' | 'uso' | 'cert'
 
 const STATUS_BADGE: Record<string, string> = {
   trial: 'badge-yellow', active: 'badge-green', suspended: 'badge-red', cancelled: 'badge-gray',
@@ -148,13 +149,13 @@ export default function TenantDetail() {
 
       {/* Tabs */}
       <div className="tabs">
-        {(['info', 'soporte', 'suscripcion', 'uso'] as Tab[]).map((t) => (
+        {(['info', 'soporte', 'suscripcion', 'uso', 'cert'] as Tab[]).map((t) => (
           <button
             key={t}
             className={`tab-btn ${tab === t ? 'active' : ''}`}
             onClick={() => setTab(t)}
           >
-            {t === 'info' ? 'Información' : t === 'soporte' ? 'Soporte' : t === 'suscripcion' ? 'Suscripción' : 'Uso'}
+            {t === 'info' ? 'Información' : t === 'soporte' ? 'Soporte' : t === 'suscripcion' ? 'Suscripción' : t === 'uso' ? 'Uso' : '🔐 Certificado DGI'}
           </button>
         ))}
       </div>
@@ -289,6 +290,24 @@ export default function TenantDetail() {
           <UsageStat label="Facturas este mes" value={tenant.usage_invoices_month} limit={tenant.plan?.max_invoices_per_month} unit="" />
           <UsageStat label="Usuarios activos" value={tenant.usage_users} limit={tenant.plan?.max_users} unit="" />
           <UsageStat label="Almacenamiento" value={tenant.usage_storage_mb} limit={tenant.plan?.max_storage_mb} unit=" MB" />
+        </div>
+      )}
+
+      {/* Tab: Certificado DGI */}
+      {tab === 'cert' && (
+        <div className="card">
+          <h3 style={{ fontWeight: 700, marginBottom: 4, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+            Certificado Digital DGI
+          </h3>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: 16 }}>
+            Gestioná el certificado PKCS#12 (.pfx) del tenant para la emisión de CFEs.
+            Podés cargar o reemplazar el certificado en nombre del cliente.
+          </p>
+          <CertPanel
+            statusFn={() => tenantsApi.getCertStatus(id!)}
+            uploadFn={(file, password, notes) => tenantsApi.uploadCert(id!, file, password, notes)}
+            historyFn={() => tenantsApi.getCertHistory(id!)}
+          />
         </div>
       )}
 

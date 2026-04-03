@@ -9,6 +9,8 @@ import type {
   TenantStats,
   TicketStats,
   DashboardStats,
+  CertStatus,
+  CertHistoryEntry,
 } from '../types'
 
 const api = axios.create({
@@ -85,6 +87,22 @@ export const tenants = {
 
   resetAdminPassword: (id: string): Promise<{ email: string; password: string; note: string }> =>
     api.post(`/tenants/${id}/reset-admin-password`).then((r) => r.data),
+
+  getCertStatus: (id: string): Promise<CertStatus> =>
+    api.get(`/tenants/${id}/cert`).then((r) => r.data),
+
+  uploadCert: (id: string, file: File, password: string, notes?: string): Promise<CertStatus> => {
+    const form = new FormData()
+    form.append('cert', file)
+    form.append('password', password)
+    if (notes) form.append('notes', notes)
+    return api.post(`/tenants/${id}/cert`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then((r) => r.data)
+  },
+
+  getCertHistory: (id: string): Promise<CertHistoryEntry[]> =>
+    api.get(`/tenants/${id}/cert/history`).then((r) => r.data),
 }
 
 // Support

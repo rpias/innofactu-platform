@@ -137,3 +137,27 @@ export interface LoginResponse {
   token: string
   user: PlatformUser
 }
+
+export interface CertStatus {
+  has_cert: boolean
+  expiry_date?: string
+  days_until_expiry: number
+  expiry_status: 'none' | 'ok' | 'warning' | 'critical' | 'expired'
+  subject_rut?: string
+  subject_name?: string
+  serial?: string
+  uploaded_at?: string
+  uploaded_by?: string
+}
+
+export interface CertHistoryEntry {
+  ID: number
+  CreatedAt: string
+  uploaded_at: string
+  uploaded_by: string
+  uploaded_source: 'tenant' | 'platform'
+  cert_expiry?: string
+  cert_subject_rut?: string
+  cert_serial?: string
+  notes?: string
+}
