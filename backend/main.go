@@ -4,14 +4,17 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"platform/internal/controllers"
 	"platform/internal/database"
+	"platform/internal/jobs"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
+	"github.com/robfig/cron/v3"
 )
 
 func main() {
@@ -22,6 +25,16 @@ func main() {
 
 	// Conectar a la base de datos
 	database.ConnectDB()
+
+	// Cron: sincronizar cotizaciones BCU todos los días a las 20:30 hora Montevideo
+	c := cron.New(cron.WithLocation(mustLoadLocation("America/Montevideo")))
+	c.AddFunc("30 20 * * *", func() {
+		if _, err := jobs.SyncExchangeRates(); err != nil {
+			log.Printf("[cron] Error sincronizando cotizaciones: %v", err)
+		}
+	})
+	c.Start()
+	defer c.Stop()
 
 	// Crear router
 	r := chi.NewRouter()
@@ -54,6 +67,10 @@ func main() {
 		r.Get("/dgi/rut", controllers.ConsultarRUT)
 	})
 
+	// Rutas internas (service-to-service, protegidas con X-Internal-Key)
+	r.Get("/internal/rates", controllers.InternalRatesAuth(controllers.GetRates))
+	r.Post("/internal/rates/sync", controllers.InternalRatesAuth(controllers.TriggerRateSync))
+
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -69,4 +86,13 @@ func main() {
 	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatalf("Error iniciando servidor: %v", err)
 	}
+}
+
+func mustLoadLocation(name string) *time.Location {
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		log.Printf("Advertencia: no se pudo cargar timezone %s, usando UTC: %v", name, err)
+		return time.UTC
+	}
+	return loc
 }

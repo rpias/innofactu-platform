@@ -62,6 +62,7 @@ func autoMigrate() {
 		&models.SupportMessage{},
 		&models.TenantSubscription{},
 		&models.TenantUsage{},
+		&models.ExchangeRate{},
 	)
 	if err != nil {
 		log.Fatalf("Error en AutoMigrate: %v", err)
