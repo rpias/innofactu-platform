@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"strings"
@@ -597,6 +598,53 @@ func DeleteTenantCAERange(w http.ResponseWriter, r *http.Request) {
 	proxyToERP(w, "DELETE", "/cae-ranges/"+rangeID, schema, nil, "")
 }
 
+// UploadTenantLogo permite al platform admin subir el logo de un tenant.
+// Multipart: campo "logo" (imagen).
+func UploadTenantLogo(w http.ResponseWriter, r *http.Request) {
+	tenantID := chi.URLParam(r, "id")
+	var tenant models.Tenant
+	if err := database.DB.Where("id = ?", tenantID).First(&tenant).Error; err != nil {
+		http.Error(w, "tenant no encontrado", http.StatusNotFound)
+		return
+	}
+	schema := "t_" + strings.ReplaceAll(tenant.Slug, "-", "_")
+
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		http.Error(w, "archivo demasiado grande (máx 10 MB)", http.StatusBadRequest)
+		return
+	}
+	file, header, err := r.FormFile("logo")
+	if err != nil {
+		http.Error(w, "campo 'logo' requerido", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// Reenviar el multipart al ERP interno
+	pr, pw := io.Pipe()
+	mw := multipart.NewWriter(pw)
+	go func() {
+		defer pw.Close()
+		defer mw.Close()
+		part, _ := mw.CreateFormFile("logo", header.Filename)
+		io.Copy(part, file)
+	}()
+
+	req, _ := http.NewRequest("POST", erpInternalURL()+"/logo?schema="+schema, pr)
+	req.Header.Set("X-Internal-Key", erpInternalKey())
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "error al contactar ERP: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
+}
+
 func TenantRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.Use(AuthRequired)
@@ -608,6 +656,8 @@ func TenantRoutes() chi.Router {
 	r.Post("/{id}/suspend", SuspendTenant)
 	r.Post("/{id}/reactivate", ReactivateTenant)
 	r.Post("/{id}/reset-admin-password", ResetAdminPassword)
+	// Logo
+	r.Post("/{id}/logo", UploadTenantLogo)
 	// Certificados DGI
 	r.Get("/{id}/cert", GetTenantCert)
 	r.Post("/{id}/cert", UploadTenantCert)

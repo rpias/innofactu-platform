@@ -48,6 +48,9 @@ export default function TenantDetail() {
   const [parseError, setParseError] = useState('')
   const [caeSaving, setCaeSaving] = useState(false)
   const caeFileRef = useRef<HTMLInputElement>(null)
+  const logoInputRef = useRef<HTMLInputElement>(null)
+  const [logoUploading, setLogoUploading] = useState(false)
+  const [logoURL, setLogoURL] = useState('')
 
   useEffect(() => {
     if (!id) return
@@ -60,6 +63,8 @@ export default function TenantDetail() {
       setEditForm(t)
       setPlans(p)
       setTickets(tick)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((t as any).logo_url) setLogoURL((t as any).logo_url)
     }).finally(() => setLoading(false))
   }, [id])
 
@@ -115,6 +120,21 @@ export default function TenantDetail() {
       setEditForm(updated)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !id) return
+    setLogoUploading(true)
+    try {
+      const result = await tenantsApi.uploadLogo(id, file)
+      setLogoURL(result.logo_url)
+    } catch {
+      setErrorMsg('Error al subir el logo.')
+    } finally {
+      setLogoUploading(false)
+      if (logoInputRef.current) logoInputRef.current.value = ''
     }
   }
 
@@ -264,6 +284,39 @@ export default function TenantDetail() {
                 rows={3}
                 style={{ resize: 'vertical' }}
               />
+            </div>
+            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <label className="form-label">Logo del tenant</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {logoURL && (
+                  <div style={{ position: 'relative', display: 'inline-block' }}>
+                    <img
+                      src={`http://localhost:8080${logoURL}`}
+                      alt="Logo"
+                      style={{ maxHeight: 60, maxWidth: 180, border: '1px solid #e2e8f0', borderRadius: 6, padding: 4, background: '#fff' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setLogoURL('')}
+                      style={{ position: 'absolute', top: -6, right: -6, background: '#ef4444', border: 'none', borderRadius: '50%', width: 18, height: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <X size={10} color="white" />
+                    </button>
+                  </div>
+                )}
+                <input ref={logoInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: 'none' }} onChange={handleLogoUpload} />
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => logoInputRef.current?.click()}
+                  disabled={logoUploading}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, width: 'fit-content' }}
+                >
+                  <Upload size={13} />
+                  {logoUploading ? 'Subiendo...' : logoURL ? 'Cambiar logo' : 'Subir logo'}
+                </button>
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>JPG, PNG, WebP o GIF · máx. 10 MB · se redimensiona a 600×300 px</div>
+              </div>
             </div>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>

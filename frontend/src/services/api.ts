@@ -107,6 +107,14 @@ export const tenants = {
   getCertHistory: (id: string): Promise<CertHistoryEntry[]> =>
     api.get(`/tenants/${id}/cert/history`).then((r) => r.data),
 
+  uploadLogo: (id: string, file: File): Promise<{ logo_url: string }> => {
+    const form = new FormData()
+    form.append('logo', file)
+    return api.post(`/tenants/${id}/logo`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then((r) => r.data)
+  },
+
   // CAE Ranges
   getCAERanges: (id: string): Promise<CAERange[]> =>
     api.get(`/tenants/${id}/cae-ranges`).then((r) => r.data),
