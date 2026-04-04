@@ -490,6 +490,113 @@ func GetTenantCertHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 
+// ── CAE Ranges (proxy Platform → ERP) ───────────────────────────────────────
+
+// tenantSchema resuelve el schema del ERP para un tenant por ID.
+func tenantSchema(tenantID string) (string, error) {
+	var tenant models.Tenant
+	if err := database.DB.Where("id = ?", tenantID).First(&tenant).Error; err != nil {
+		return "", err
+	}
+	schema := tenant.DBSchema
+	if schema == "" {
+		schema = "t_" + strings.ReplaceAll(tenant.Slug, "-", "_")
+	}
+	return schema, nil
+}
+
+// proxyToERP reenvía la request al ERP interno con el schema como query param.
+// Soporta: GET, POST, DELETE. Para multipart se usa proxyMultipartToERP.
+func proxyToERP(w http.ResponseWriter, method, path, schema string, body io.Reader, contentType string) {
+	url := erpInternalURL() + path + "?schema=" + schema
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		http.Error(w, "error construyendo request al ERP", http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("X-Internal-Key", erpInternalKey())
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "error contactando ERP: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
+}
+
+// GetTenantCAERanges — GET /api/tenants/{id}/cae-ranges
+func GetTenantCAERanges(w http.ResponseWriter, r *http.Request) {
+	schema, err := tenantSchema(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "tenant no encontrado", http.StatusNotFound)
+		return
+	}
+	proxyToERP(w, "GET", "/cae-ranges", schema, nil, "")
+}
+
+// GetTenantInvoiceTypes — GET /api/tenants/{id}/invoice-types
+func GetTenantInvoiceTypes(w http.ResponseWriter, r *http.Request) {
+	schema, err := tenantSchema(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "tenant no encontrado", http.StatusNotFound)
+		return
+	}
+	proxyToERP(w, "GET", "/invoice-types", schema, nil, "")
+}
+
+// CreateTenantCAERange — POST /api/tenants/{id}/cae-ranges
+func CreateTenantCAERange(w http.ResponseWriter, r *http.Request) {
+	schema, err := tenantSchema(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "tenant no encontrado", http.StatusNotFound)
+		return
+	}
+	proxyToERP(w, "POST", "/cae-ranges", schema, r.Body, "application/json")
+}
+
+// ParseTenantCAEXML — POST /api/tenants/{id}/cae-ranges/parse-xml
+// Reenvía el multipart al ERP directamente (Content-Type incluye boundary).
+func ParseTenantCAEXML(w http.ResponseWriter, r *http.Request) {
+	schema, err := tenantSchema(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "tenant no encontrado", http.StatusNotFound)
+		return
+	}
+	url := erpInternalURL() + "/cae-ranges/parse-xml?schema=" + schema
+	req, err := http.NewRequest("POST", url, r.Body)
+	if err != nil {
+		http.Error(w, "error construyendo request", http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("X-Internal-Key", erpInternalKey())
+	req.Header.Set("Content-Type", r.Header.Get("Content-Type")) // preserva boundary del multipart
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "error contactando ERP: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
+}
+
+// DeleteTenantCAERange — DELETE /api/tenants/{id}/cae-ranges/{rangeId}
+func DeleteTenantCAERange(w http.ResponseWriter, r *http.Request) {
+	schema, err := tenantSchema(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "tenant no encontrado", http.StatusNotFound)
+		return
+	}
+	rangeID := chi.URLParam(r, "rangeId")
+	proxyToERP(w, "DELETE", "/cae-ranges/"+rangeID, schema, nil, "")
+}
+
 func TenantRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.Use(AuthRequired)
@@ -505,5 +612,11 @@ func TenantRoutes() chi.Router {
 	r.Get("/{id}/cert", GetTenantCert)
 	r.Post("/{id}/cert", UploadTenantCert)
 	r.Get("/{id}/cert/history", GetTenantCertHistory)
+	// CAE Ranges
+	r.Get("/{id}/cae-ranges", GetTenantCAERanges)
+	r.Post("/{id}/cae-ranges", CreateTenantCAERange)
+	r.Post("/{id}/cae-ranges/parse-xml", ParseTenantCAEXML)
+	r.Delete("/{id}/cae-ranges/{rangeId}", DeleteTenantCAERange)
+	r.Get("/{id}/invoice-types", GetTenantInvoiceTypes)
 	return r
 }

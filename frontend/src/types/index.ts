@@ -161,3 +161,45 @@ export interface CertHistoryEntry {
   cert_serial?: string
   notes?: string
 }
+
+export interface InvoiceType {
+  id: number
+  name: string
+  code: string
+  code_int: number
+  is_electronic: boolean
+}
+
+export interface CAERange {
+  ID: number
+  CreatedAt: string
+  invoice_type_id: number
+  invoice_type_name: string
+  invoice_type_code: string
+  serie: string
+  range_from: number
+  range_to: number
+  current: number
+  is_active: boolean
+  expires_at?: string
+  available: number
+  used_pct: number
+  days_to_expiry?: number
+  expiry_warning: boolean
+  is_expired: boolean
+}
+
+export interface CAEParseResult {
+  ruc_e: string
+  tcfe: number
+  serie: string
+  dnro: number
+  hnro: number
+  na: number
+  fa: string
+  fvd: string
+  rut_match: boolean
+  invoice_type_id: number
+  cantidad: number
+  warning?: string
+}

@@ -11,6 +11,9 @@ import type {
   DashboardStats,
   CertStatus,
   CertHistoryEntry,
+  InvoiceType,
+  CAERange,
+  CAEParseResult,
 } from '../types'
 
 const api = axios.create({
@@ -103,6 +106,27 @@ export const tenants = {
 
   getCertHistory: (id: string): Promise<CertHistoryEntry[]> =>
     api.get(`/tenants/${id}/cert/history`).then((r) => r.data),
+
+  // CAE Ranges
+  getCAERanges: (id: string): Promise<CAERange[]> =>
+    api.get(`/tenants/${id}/cae-ranges`).then((r) => r.data),
+
+  getInvoiceTypes: (id: string): Promise<InvoiceType[]> =>
+    api.get(`/tenants/${id}/invoice-types`).then((r) => r.data),
+
+  createCAERange: (id: string, data: { invoice_type_id: number; serie: string; range_from: number; range_to: number; expires_at?: string }): Promise<CAERange> =>
+    api.post(`/tenants/${id}/cae-ranges`, data).then((r) => r.data),
+
+  parseCAEXML: (id: string, file: File): Promise<CAEParseResult> => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post(`/tenants/${id}/cae-ranges/parse-xml`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then((r) => r.data)
+  },
+
+  deleteCAERange: (id: string, rangeId: number): Promise<void> =>
+    api.delete(`/tenants/${id}/cae-ranges/${rangeId}`).then(() => undefined),
 }
 
 // Support
