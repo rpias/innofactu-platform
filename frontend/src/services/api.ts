@@ -20,6 +20,10 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
 })
 
+// URL base del ERP backend (para archivos estáticos como logos)
+export const erpOrigin = () =>
+  (import.meta.env.VITE_ERP_URL as string | undefined) || 'http://localhost:8080'
+
 // Interceptor: añadir token Bearer
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('platform_token')

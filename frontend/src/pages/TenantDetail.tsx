@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Copy, KeyRound, RefreshCw, Upload, FileText, ChevronRight, Trash2, X } from 'lucide-react'
-import { tenants as tenantsApi, plans as plansApi, support as supportApi } from '../services/api'
+import { tenants as tenantsApi, plans as plansApi, support as supportApi, erpOrigin } from '../services/api'
 import type { Tenant, Plan, SupportTicket, CAERange, CAEParseResult, InvoiceType } from '../types'
 import CertPanel from '../components/CertPanel'
 
@@ -291,7 +291,7 @@ export default function TenantDetail() {
                 {logoURL && (
                   <div style={{ position: 'relative', display: 'inline-block' }}>
                     <img
-                      src={`http://localhost:8080${logoURL}`}
+                      src={`${erpOrigin()}${logoURL}`}
                       alt="Logo"
                       style={{ maxHeight: 60, maxWidth: 180, border: '1px solid #e2e8f0', borderRadius: 6, padding: 4, background: '#fff' }}
                     />
