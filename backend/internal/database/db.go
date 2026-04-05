@@ -63,11 +63,96 @@ func autoMigrate() {
 		&models.TenantSubscription{},
 		&models.TenantUsage{},
 		&models.ExchangeRate{},
+		// Add-ons e-commerce
+		&models.ECommerceAddon{},
+		&models.TenantAddonSubscription{},
 	)
 	if err != nil {
 		log.Fatalf("Error en AutoMigrate: %v", err)
 	}
 	log.Println("AutoMigrate completado")
+	seedECommerceAddons()
+}
+
+func seedECommerceAddons() {
+	var count int64
+	DB.Model(&models.ECommerceAddon{}).Count(&count)
+	if count > 0 {
+		return
+	}
+	addons := []models.ECommerceAddon{
+		{Code: "woocommerce", Name: "WooCommerce", Category: "ecommerce",
+			Description:     "Sincroniza catálogo, stock y precios con tu tienda WooCommerce (WordPress).",
+			PriceMonthlyUYU: 490, PriceYearlyUYU: 4900,
+			SyncProducts: true, SyncVariants: true, SyncImages: true, SyncStock: true, SyncPrices: true, SyncOrders: false,
+			IsActive: true, SortOrder: 1},
+		{Code: "tiendanube", Name: "Tiendanube", Category: "ecommerce",
+			Description:     "Integración con Tiendanube (Nuvemshop), líder en Latinoamérica.",
+			PriceMonthlyUYU: 490, PriceYearlyUYU: 4900,
+			SyncProducts: true, SyncVariants: true, SyncImages: true, SyncStock: true, SyncPrices: true, SyncOrders: true,
+			IsActive: true, SortOrder: 2},
+		{Code: "shopify", Name: "Shopify", Category: "ecommerce",
+			Description:     "Sincroniza con Shopify. Compatible con todos los planes de Shopify.",
+			PriceMonthlyUYU: 790, PriceYearlyUYU: 7900,
+			RequiredPlanCode: "profesional",
+			SyncProducts: true, SyncVariants: true, SyncImages: true, SyncStock: true, SyncPrices: true, SyncOrders: true,
+			IsActive: true, SortOrder: 3},
+		{Code: "bigcommerce", Name: "BigCommerce", Category: "ecommerce",
+			Description:     "Integración con BigCommerce para tiendas con alto volumen.",
+			PriceMonthlyUYU: 790, PriceYearlyUYU: 7900,
+			RequiredPlanCode: "profesional",
+			SyncProducts: true, SyncVariants: true, SyncImages: true, SyncStock: true, SyncPrices: true,
+			IsActive: true, SortOrder: 4},
+		{Code: "prestashop", Name: "PrestaShop", Category: "ecommerce",
+			Description:     "Conecta con tiendas PrestaShop vía Webservice API.",
+			PriceMonthlyUYU: 490, PriceYearlyUYU: 4900,
+			SyncProducts: true, SyncVariants: true, SyncImages: true, SyncStock: true, SyncPrices: true,
+			IsActive: true, SortOrder: 5},
+		{Code: "magento", Name: "Adobe Commerce (Magento)", Category: "ecommerce",
+			Description:     "Integración enterprise con Adobe Commerce / Magento 2.",
+			PriceMonthlyUYU: 1490, PriceYearlyUYU: 14900,
+			RequiredPlanCode: "empresarial",
+			SyncProducts: true, SyncVariants: true, SyncImages: true, SyncStock: true, SyncPrices: true,
+			IsActive: true, SortOrder: 6},
+		{Code: "opencart", Name: "OpenCart", Category: "ecommerce",
+			Description:     "Sincronización básica con tiendas OpenCart.",
+			PriceMonthlyUYU: 390, PriceYearlyUYU: 3900,
+			SyncProducts: true, SyncStock: true, SyncPrices: true,
+			IsActive: true, SortOrder: 7},
+		{Code: "ecwid", Name: "Ecwid", Category: "ecommerce",
+			Description:     "Conecta con tu widget de tienda Ecwid embebido en cualquier sitio.",
+			PriceMonthlyUYU: 390, PriceYearlyUYU: 3900,
+			SyncProducts: true, SyncVariants: true, SyncImages: true, SyncStock: true, SyncPrices: true,
+			IsActive: true, SortOrder: 8},
+		{Code: "medusa", Name: "Medusa", Category: "ecommerce",
+			Description:     "Headless commerce open-source. Para equipos con desarrollo propio.",
+			PriceMonthlyUYU: 590, PriceYearlyUYU: 5900,
+			RequiredPlanCode: "profesional",
+			SyncProducts: true, SyncVariants: true, SyncImages: true, SyncStock: true, SyncPrices: true,
+			IsActive: true, SortOrder: 9},
+		{Code: "saleor", Name: "Saleor", Category: "ecommerce",
+			Description:     "Plataforma headless GraphQL para arquitecturas avanzadas.",
+			PriceMonthlyUYU: 590, PriceYearlyUYU: 5900,
+			RequiredPlanCode: "profesional",
+			SyncProducts: true, SyncVariants: true, SyncImages: true, SyncStock: true, SyncPrices: true,
+			IsActive: true, SortOrder: 10},
+		{Code: "odoo", Name: "Odoo", Category: "erp",
+			Description:     "Sincronización bidireccional con Odoo ERP + e-commerce.",
+			PriceMonthlyUYU: 990, PriceYearlyUYU: 9900,
+			RequiredPlanCode: "empresarial",
+			SyncProducts: true, SyncVariants: true, SyncStock: true, SyncPrices: true, SyncOrders: true,
+			IsActive: true, SortOrder: 11},
+		{Code: "wix", Name: "Wix eCommerce", Category: "ecommerce",
+			Description:     "Integración con tiendas Wix eCommerce.",
+			PriceMonthlyUYU: 490, PriceYearlyUYU: 4900,
+			SyncProducts: true, SyncVariants: true, SyncImages: true, SyncStock: true, SyncPrices: true,
+			IsActive: true, SortOrder: 12},
+	}
+	if err := DB.Create(&addons).Error; err != nil {
+		log.Printf("Error creando add-ons e-commerce: %v", err)
+	} else {
+		log.Printf("Add-ons e-commerce creados: %d conectores", len(addons))
+	}
 }
 
 func SeedData() {

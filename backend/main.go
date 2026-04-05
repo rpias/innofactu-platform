@@ -65,6 +65,12 @@ func main() {
 		r.Mount("/support", controllers.SupportRoutes())
 		r.Mount("/dashboard", controllers.DashboardRoutes())
 		r.Get("/dgi/rut", controllers.ConsultarRUT)
+
+		// Add-ons e-commerce
+		r.Mount("/addons/ecommerce", controllers.ECommerceAddonRoutes())
+
+		// Add-ons por tenant — nested bajo /tenants/{tenantId}/addons
+		r.Mount("/tenants/{tenantId}/addons", controllers.TenantAddonRoutes())
 	})
 
 	// Rutas internas (service-to-service, protegidas con X-Internal-Key)
