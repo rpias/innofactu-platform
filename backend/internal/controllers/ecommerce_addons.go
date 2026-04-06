@@ -233,6 +233,43 @@ func CheckTenantAddonAccess(w http.ResponseWriter, r *http.Request) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// ENDPOINT INTERNO — usado por el ERP para verificar add-ons activos
+// ──────────────────────────────────────────────────────────────────────────────
+
+// GET /internal/tenant-addons-by-schema/{schema}
+// Devuelve los add-ons activos para el tenant con ese db_schema.
+// Protegido con X-Internal-Key (llamado desde el ERP backend).
+func GetActiveAddonsBySchema(w http.ResponseWriter, r *http.Request) {
+	schema := chi.URLParam(r, "schema")
+
+	// Buscar tenant por db_schema
+	var tenant models.Tenant
+	if err := database.DB.Where("db_schema = ?", schema).First(&tenant).Error; err != nil {
+		// Si no existe el tenant (o aún no tiene addons), devolver lista vacía
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"active_addons": []string{},
+		})
+		return
+	}
+
+	var subs []models.TenantAddonSubscription
+	database.DB.Preload("Addon").
+		Where("tenant_id = ? AND status = 'active' AND expires_at > ?", tenant.ID, time.Now()).
+		Find(&subs)
+
+	activeCodes := make([]string, 0, len(subs))
+	for _, s := range subs {
+		activeCodes = append(activeCodes, s.Addon.Code)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"active_addons": activeCodes,
+	})
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // RUTAS
 // ──────────────────────────────────────────────────────────────────────────────
 

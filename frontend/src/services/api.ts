@@ -182,4 +182,57 @@ export const dashboard = {
     api.get('/dashboard').then((r) => r.data),
 }
 
+// E-Commerce Add-ons
+export interface ECommerceAddon {
+  ID: number
+  code: string
+  name: string
+  description: string
+  price_monthly_uyu: number
+  price_yearly_uyu: number
+  required_plan_code: string
+  is_active: boolean
+  sort_order: number
+}
+
+export interface TenantAddonSubscription {
+  ID: number
+  tenant_id: string
+  addon_id: number
+  addon: ECommerceAddon
+  billing_cycle: string
+  price_paid: number
+  starts_at: string
+  expires_at: string
+  auto_renew: boolean
+  status: string  // "active" | "cancelled" | "expired"
+  notes: string
+}
+
+export const addons = {
+  // Catálogo de add-ons (público)
+  list: (): Promise<ECommerceAddon[]> =>
+    api.get('/addons/ecommerce').then((r) => r.data),
+
+  // Suscripciones de un tenant
+  getTenantAddons: (tenantId: string): Promise<TenantAddonSubscription[]> =>
+    api.get(`/tenants/${tenantId}/addons`).then((r) => r.data),
+
+  getActiveAddons: (tenantId: string): Promise<{ subscriptions: TenantAddonSubscription[]; active_addons: string[] }> =>
+    api.get(`/tenants/${tenantId}/addons/active`).then((r) => r.data),
+
+  activate: (tenantId: string, data: {
+    addon_id: number
+    billing_cycle: 'monthly' | 'yearly'
+    months?: number
+    price_paid?: number
+    auto_renew?: boolean
+    notes?: string
+  }): Promise<TenantAddonSubscription> =>
+    api.post(`/tenants/${tenantId}/addons`, data).then((r) => r.data),
+
+  cancel: (tenantId: string, subId: number): Promise<void> =>
+    api.delete(`/tenants/${tenantId}/addons/${subId}`).then(() => undefined),
+}
+
 export default api

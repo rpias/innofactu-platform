@@ -76,6 +76,7 @@ func main() {
 	// Rutas internas (service-to-service, protegidas con X-Internal-Key)
 	r.Get("/internal/rates", controllers.InternalRatesAuth(controllers.GetRates))
 	r.Post("/internal/rates/sync", controllers.InternalRatesAuth(controllers.TriggerRateSync))
+	r.Get("/internal/tenant-addons-by-schema/{schema}", controllers.InternalRatesAuth(controllers.GetActiveAddonsBySchema))
 
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {

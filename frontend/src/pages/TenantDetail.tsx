@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Copy, KeyRound, RefreshCw, Upload, FileText, ChevronRight, Trash2, X } from 'lucide-react'
-import { tenants as tenantsApi, plans as plansApi, support as supportApi, erpOrigin } from '../services/api'
+import { tenants as tenantsApi, plans as plansApi, support as supportApi, erpOrigin, addons as addonsApi, type ECommerceAddon, type TenantAddonSubscription } from '../services/api'
 import type { Tenant, Plan, SupportTicket, CAERange, CAEParseResult, InvoiceType } from '../types'
 import CertPanel from '../components/CertPanel'
 
-type Tab = 'info' | 'soporte' | 'suscripcion' | 'uso' | 'cert' | 'cae'
+type Tab = 'info' | 'soporte' | 'suscripcion' | 'uso' | 'cert' | 'cae' | 'integraciones'
 
 const STATUS_BADGE: Record<string, string> = {
   trial: 'badge-yellow', active: 'badge-green', suspended: 'badge-red', cancelled: 'badge-gray',
@@ -52,6 +52,14 @@ export default function TenantDetail() {
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoURL, setLogoURL] = useState('')
 
+  // Integraciones e-commerce state
+  const [allAddons, setAllAddons] = useState<ECommerceAddon[]>([])
+  const [tenantSubs, setTenantSubs] = useState<TenantAddonSubscription[]>([])
+  const [addonLoading, setAddonLoading] = useState(false)
+  const [activating, setActivating] = useState<number | null>(null) // addon_id en proceso
+  const [addonForm, setAddonForm] = useState<{ cycle: 'monthly' | 'yearly'; months: number; notes: string }>({ cycle: 'monthly', months: 1, notes: '' })
+  const [selectedAddon, setSelectedAddon] = useState<ECommerceAddon | null>(null)
+
   useEffect(() => {
     if (!id) return
     Promise.all([
@@ -67,6 +75,36 @@ export default function TenantDetail() {
       if ((t as any).logo_url) setLogoURL((t as any).logo_url)
     }).finally(() => setLoading(false))
   }, [id])
+
+  const loadIntegraciones = () => {
+    if (!id) return
+    setAddonLoading(true)
+    Promise.all([addonsApi.list(), addonsApi.getTenantAddons(id)])
+      .then(([catalog, subs]) => { setAllAddons(catalog); setTenantSubs(subs) })
+      .finally(() => setAddonLoading(false))
+  }
+
+  const handleActivateAddon = async (addon: ECommerceAddon) => {
+    if (!id) return
+    setActivating(addon.ID)
+    try {
+      await addonsApi.activate(id, {
+        addon_id: addon.ID,
+        billing_cycle: addonForm.cycle,
+        months: addonForm.months,
+        notes: addonForm.notes,
+      })
+      setSelectedAddon(null)
+      loadIntegraciones()
+    } catch { alert('Error al activar el add-on.') }
+    finally { setActivating(null) }
+  }
+
+  const handleCancelAddon = async (subId: number) => {
+    if (!id || !confirm('¿Cancelar esta integración? El tenant perderá el acceso al vencer.')) return
+    await addonsApi.cancel(id, subId)
+    loadIntegraciones()
+  }
 
   const loadCAE = () => {
     if (!id) return
@@ -222,13 +260,13 @@ export default function TenantDetail() {
 
       {/* Tabs */}
       <div className="tabs">
-        {(['info', 'soporte', 'suscripcion', 'uso', 'cert', 'cae'] as Tab[]).map((t) => (
+        {(['info', 'soporte', 'suscripcion', 'uso', 'cert', 'cae', 'integraciones'] as Tab[]).map((t) => (
           <button
             key={t}
             className={`tab-btn ${tab === t ? 'active' : ''}`}
-            onClick={() => { setTab(t); if (t === 'cae') loadCAE() }}
+            onClick={() => { setTab(t); if (t === 'cae') loadCAE(); if (t === 'integraciones') loadIntegraciones() }}
           >
-            {t === 'info' ? 'Información' : t === 'soporte' ? 'Soporte' : t === 'suscripcion' ? 'Suscripción' : t === 'uso' ? 'Uso' : t === 'cert' ? '🔐 Certificado DGI' : '⚡ CAE'}
+            {t === 'info' ? 'Información' : t === 'soporte' ? 'Soporte' : t === 'suscripcion' ? 'Suscripción' : t === 'uso' ? 'Uso' : t === 'cert' ? '🔐 Certificado DGI' : t === 'cae' ? '⚡ CAE' : '🛒 Integraciones'}
           </button>
         ))}
       </div>
@@ -684,6 +722,174 @@ export default function TenantDetail() {
               <button className="btn btn-primary" onClick={handleResetAdminPassword}>Confirmar</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Tab: Integraciones E-Commerce */}
+      {tab === 'integraciones' && (
+        <div>
+          {addonLoading ? (
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Cargando...</p>
+          ) : (
+            <>
+              {/* Suscripciones activas */}
+              <div className="card" style={{ marginBottom: 20 }}>
+                <h3 style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 14, color: 'var(--text-primary)' }}>
+                  Integraciones contratadas
+                </h3>
+                {tenantSubs.filter(s => s.status === 'active').length === 0 ? (
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.83rem' }}>Sin integraciones activas.</p>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem' }}>
+                    <thead>
+                      <tr>
+                        {['Plataforma', 'Ciclo', 'Precio pagado', 'Expira', 'Estado', ''].map(h => (
+                          <th key={h} style={{ textAlign: 'left', padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.75rem', borderBottom: '1px solid var(--input-border)' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tenantSubs.filter(s => s.status === 'active').map(sub => (
+                        <tr key={sub.ID} style={{ borderBottom: '1px solid var(--input-border)' }}>
+                          <td style={{ padding: '8px' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{sub.addon?.name}</span>
+                          </td>
+                          <td style={{ padding: '8px', color: 'var(--text-secondary)' }}>
+                            {sub.billing_cycle === 'yearly' ? 'Anual' : 'Mensual'}
+                          </td>
+                          <td style={{ padding: '8px', color: 'var(--text-secondary)' }}>
+                            ${sub.price_paid?.toLocaleString('es-UY')} UYU
+                          </td>
+                          <td style={{ padding: '8px', color: 'var(--text-secondary)' }}>
+                            {new Date(sub.expires_at).toLocaleDateString('es-UY')}
+                          </td>
+                          <td style={{ padding: '8px' }}>
+                            <span className="badge badge-green">Activa</span>
+                          </td>
+                          <td style={{ padding: '8px' }}>
+                            <button
+                              className="btn btn-ghost"
+                              style={{ padding: '4px 8px', color: '#ef4444', fontSize: '0.75rem' }}
+                              onClick={() => handleCancelAddon(sub.ID)}
+                            >
+                              Cancelar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Catálogo de add-ons disponibles */}
+              <div className="card">
+                <h3 style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 6, color: 'var(--text-primary)' }}>
+                  Activar nueva integración
+                </h3>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 16 }}>
+                  Seleccioná una plataforma para activarla en este tenant. Se registra la suscripción y el tenant tendrá acceso inmediato.
+                </p>
+
+                {selectedAddon ? (
+                  /* Formulario de activación */
+                  <div style={{ background: 'var(--search-bg)', borderRadius: 10, padding: 16 }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 12, color: 'var(--text-primary)' }}>
+                      Activar: {selectedAddon.name}
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Ciclo</label>
+                        <select
+                          value={addonForm.cycle}
+                          onChange={e => setAddonForm(f => ({ ...f, cycle: e.target.value as 'monthly' | 'yearly' }))}
+                          style={{ width: '100%', padding: '6px 10px', borderRadius: 7, border: '1px solid var(--input-border)', background: 'var(--input-bg)', color: 'var(--text-primary)', fontSize: '0.83rem' }}
+                        >
+                          <option value="monthly">Mensual — ${selectedAddon.price_monthly_uyu?.toLocaleString('es-UY')} UYU/mes</option>
+                          <option value="yearly">Anual — ${selectedAddon.price_yearly_uyu?.toLocaleString('es-UY')} UYU/año</option>
+                        </select>
+                      </div>
+                      {addonForm.cycle === 'monthly' && (
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Meses a activar</label>
+                          <input
+                            type="number" min={1} max={24}
+                            value={addonForm.months}
+                            onChange={e => setAddonForm(f => ({ ...f, months: parseInt(e.target.value) || 1 }))}
+                            style={{ width: '100%', padding: '6px 10px', borderRadius: 7, border: '1px solid var(--input-border)', background: 'var(--input-bg)', color: 'var(--text-primary)', fontSize: '0.83rem' }}
+                          />
+                        </div>
+                      )}
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Notas internas</label>
+                        <input
+                          type="text"
+                          value={addonForm.notes}
+                          onChange={e => setAddonForm(f => ({ ...f, notes: e.target.value }))}
+                          placeholder="ej: promo marzo"
+                          style={{ width: '100%', padding: '6px 10px', borderRadius: 7, border: '1px solid var(--input-border)', background: 'var(--input-bg)', color: 'var(--text-primary)', fontSize: '0.83rem' }}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '0.83rem', color: 'var(--text-secondary)', marginBottom: 14 }}>
+                      Total a registrar: <strong style={{ color: 'var(--text-primary)' }}>
+                        ${addonForm.cycle === 'yearly'
+                          ? selectedAddon.price_yearly_uyu?.toLocaleString('es-UY')
+                          : (selectedAddon.price_monthly_uyu * addonForm.months)?.toLocaleString('es-UY')
+                        } UYU
+                      </strong>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="btn btn-ghost" onClick={() => setSelectedAddon(null)}>Cancelar</button>
+                      <button
+                        className="btn btn-primary"
+                        disabled={activating === selectedAddon.ID}
+                        onClick={() => handleActivateAddon(selectedAddon)}
+                      >
+                        {activating === selectedAddon.ID ? 'Activando...' : 'Confirmar activación'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Grid de plataformas */
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+                    {allAddons.map(addon => {
+                      const active = tenantSubs.some(s => s.addon_id === addon.ID && s.status === 'active')
+                      return (
+                        <div
+                          key={addon.ID}
+                          style={{
+                            border: `1px solid ${active ? 'rgba(16,185,129,0.4)' : 'var(--input-border)'}`,
+                            borderRadius: 10,
+                            padding: '12px 14px',
+                            background: active ? 'rgba(16,185,129,0.05)' : 'var(--card-bg)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                            <span style={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{addon.name}</span>
+                            {active && <span className="badge badge-green" style={{ fontSize: '0.68rem' }}>Activa</span>}
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.4 }}>
+                            {addon.description}
+                          </div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 10 }}>
+                            ${addon.price_monthly_uyu?.toLocaleString('es-UY')} UYU/mes
+                          </div>
+                          <button
+                            className="btn btn-primary"
+                            style={{ width: '100%', fontSize: '0.75rem', padding: '6px 0' }}
+                            onClick={() => { setSelectedAddon(addon); setAddonForm({ cycle: 'monthly', months: 1, notes: '' }) }}
+                          >
+                            {active ? 'Renovar / Extender' : 'Activar'}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 
