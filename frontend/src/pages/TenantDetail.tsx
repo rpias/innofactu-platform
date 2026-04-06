@@ -59,6 +59,17 @@ export default function TenantDetail() {
   const [activating, setActivating] = useState<number | null>(null) // addon_id en proceso
   const [addonForm, setAddonForm] = useState<{ cycle: 'monthly' | 'yearly'; months: number; notes: string }>({ cycle: 'monthly', months: 1, notes: '' })
   const [selectedAddon, setSelectedAddon] = useState<ECommerceAddon | null>(null)
+  const [addonError, setAddonError] = useState('')
+
+  // Toast de notificación
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 3500)
+  }
+
+  // Modal de confirmación genérico
+  const [confirmModal, setConfirmModal] = useState<{ msg: string; onConfirm: () => void } | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -87,6 +98,7 @@ export default function TenantDetail() {
   const handleActivateAddon = async (addon: ECommerceAddon) => {
     if (!id) return
     setActivating(addon.ID)
+    setAddonError('')
     try {
       await addonsApi.activate(id, {
         addon_id: addon.ID,
@@ -96,14 +108,25 @@ export default function TenantDetail() {
       })
       setSelectedAddon(null)
       loadIntegraciones()
-    } catch { alert('Error al activar el add-on.') }
+      showToast(`${addon.name} activada correctamente`)
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || e?.response?.data || 'Error al activar el add-on'
+      setAddonError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    }
     finally { setActivating(null) }
   }
 
-  const handleCancelAddon = async (subId: number) => {
-    if (!id || !confirm('¿Cancelar esta integración? El tenant perderá el acceso al vencer.')) return
-    await addonsApi.cancel(id, subId)
-    loadIntegraciones()
+  const handleCancelAddon = (subId: number) => {
+    setConfirmModal({
+      msg: '¿Cancelar esta integración? El tenant perderá el acceso al vencer el período actual.',
+      onConfirm: async () => {
+        setConfirmModal(null)
+        if (!id) return
+        await addonsApi.cancel(id, subId)
+        loadIntegraciones()
+        showToast('Integración cancelada')
+      },
+    })
   }
 
   const loadCAE = () => {
@@ -543,10 +566,16 @@ export default function TenantDetail() {
                           <button
                             className="btn btn-ghost"
                             style={{ padding: '4px 8px', color: '#ef4444' }}
-                            onClick={async () => {
-                              if (!id || !confirm('¿Eliminar este rango CAE?')) return
-                              await tenantsApi.deleteCAERange(id, r.ID)
-                              loadCAE()
+                            onClick={() => {
+                              setConfirmModal({
+                                msg: '¿Eliminar este rango CAE? Esta acción no se puede deshacer.',
+                                onConfirm: async () => {
+                                  setConfirmModal(null)
+                                  if (!id) return
+                                  await tenantsApi.deleteCAERange(id, r.ID)
+                                  loadCAE()
+                                },
+                              })
                             }}
                           >
                             <Trash2 size={13} />
@@ -839,8 +868,13 @@ export default function TenantDetail() {
                         } UYU
                       </strong>
                     </div>
+                    {addonError && (
+                      <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '8px 12px', fontSize: '0.82rem', color: '#ef4444', marginBottom: 12 }}>
+                        {addonError}
+                      </div>
+                    )}
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button className="btn btn-ghost" onClick={() => setSelectedAddon(null)}>Cancelar</button>
+                      <button className="btn btn-ghost" onClick={() => { setSelectedAddon(null); setAddonError('') }}>Cancelar</button>
                       <button
                         className="btn btn-primary"
                         disabled={activating === selectedAddon.ID}
@@ -899,6 +933,40 @@ export default function TenantDetail() {
           credentials={resetCredentials}
           onClose={() => setResetCredentials(null)}
         />
+      )}
+
+      {/* Modal de confirmación genérico */}
+      {confirmModal && (
+        <div className="modal-overlay" onClick={() => setConfirmModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <h2 className="modal-title">Confirmar acción</h2>
+            <p style={{ fontSize: '0.88rem', color: 'var(--text-secondary)', marginBottom: 20 }}>
+              {confirmModal.msg}
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button className="btn btn-ghost" onClick={() => setConfirmModal(null)}>Cancelar</button>
+              <button className="btn btn-primary" style={{ background: '#ef4444' }} onClick={confirmModal.onConfirm}>
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast de notificación */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
+          background: toast.type === 'success' ? 'rgba(16,185,129,0.95)' : 'rgba(239,68,68,0.95)',
+          color: '#fff', borderRadius: 10, padding: '12px 20px',
+          fontSize: '0.875rem', fontWeight: 500,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+          display: 'flex', alignItems: 'center', gap: 8,
+          maxWidth: 340,
+        }}>
+          <span>{toast.type === 'success' ? '✓' : '✕'}</span>
+          {toast.msg}
+        </div>
       )}
     </div>
   )

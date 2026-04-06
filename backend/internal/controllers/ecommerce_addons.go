@@ -284,6 +284,7 @@ func ECommerceAddonRoutes() chi.Router {
 
 func TenantAddonRoutes() chi.Router {
 	r := chi.NewRouter()
+	r.Use(AuthRequired)
 	r.Get("/", GetTenantAddons)
 	r.Get("/active", GetTenantActiveAddons)
 	r.Post("/", ActivateTenantAddon)
