@@ -184,7 +184,7 @@ export const dashboard = {
 
 // E-Commerce Add-ons
 export interface ECommerceAddon {
-  ID: number
+  id: number
   code: string
   name: string
   description: string
@@ -196,7 +196,7 @@ export interface ECommerceAddon {
 }
 
 export interface TenantAddonSubscription {
-  ID: number
+  id: number
   tenant_id: string
   addon_id: number
   addon: ECommerceAddon

@@ -97,11 +97,11 @@ export default function TenantDetail() {
 
   const handleActivateAddon = async (addon: ECommerceAddon) => {
     if (!id) return
-    setActivating(addon.ID)
+    setActivating(addon.id)
     setAddonError('')
     try {
       await addonsApi.activate(id, {
-        addon_id: addon.ID,
+        addon_id: addon.id,
         billing_cycle: addonForm.cycle,
         months: addonForm.months,
         notes: addonForm.notes,
@@ -779,7 +779,7 @@ export default function TenantDetail() {
                     </thead>
                     <tbody>
                       {tenantSubs.filter(s => s.status === 'active').map(sub => (
-                        <tr key={sub.ID} style={{ borderBottom: '1px solid var(--input-border)' }}>
+                        <tr key={sub.id} style={{ borderBottom: '1px solid var(--input-border)' }}>
                           <td style={{ padding: '8px' }}>
                             <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{sub.addon?.name}</span>
                           </td>
@@ -799,7 +799,7 @@ export default function TenantDetail() {
                             <button
                               className="btn btn-ghost"
                               style={{ padding: '4px 8px', color: '#ef4444', fontSize: '0.75rem' }}
-                              onClick={() => handleCancelAddon(sub.ID)}
+                              onClick={() => handleCancelAddon(sub.id)}
                             >
                               Cancelar
                             </button>
@@ -877,10 +877,10 @@ export default function TenantDetail() {
                       <button className="btn btn-ghost" onClick={() => { setSelectedAddon(null); setAddonError('') }}>Cancelar</button>
                       <button
                         className="btn btn-primary"
-                        disabled={activating === selectedAddon.ID}
+                        disabled={activating === selectedAddon.id}
                         onClick={() => handleActivateAddon(selectedAddon)}
                       >
-                        {activating === selectedAddon.ID ? 'Activando...' : 'Confirmar activación'}
+                        {activating === selectedAddon.id ? 'Activando...' : 'Confirmar activación'}
                       </button>
                     </div>
                   </div>
@@ -888,10 +888,10 @@ export default function TenantDetail() {
                   /* Grid de plataformas */
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
                     {allAddons.map(addon => {
-                      const active = tenantSubs.some(s => s.addon_id === addon.ID && s.status === 'active')
+                      const active = tenantSubs.some(s => s.addon_id === addon.id && s.status === 'active')
                       return (
                         <div
-                          key={addon.ID}
+                          key={addon.id}
                           style={{
                             border: `1px solid ${active ? 'rgba(16,185,129,0.4)' : 'var(--input-border)'}`,
                             borderRadius: 10,
@@ -912,7 +912,7 @@ export default function TenantDetail() {
                           <button
                             className="btn btn-primary"
                             style={{ width: '100%', fontSize: '0.75rem', padding: '6px 0' }}
-                            onClick={() => { setSelectedAddon(addon); setAddonForm({ cycle: 'monthly', months: 1, notes: '' }) }}
+                            onClick={() => { setSelectedAddon(addon); setAddonForm({ cycle: 'monthly', months: 1, notes: '' }); setAddonError('') }}
                           >
                             {active ? 'Renovar / Extender' : 'Activar'}
                           </button>
