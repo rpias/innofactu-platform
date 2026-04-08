@@ -71,12 +71,16 @@ func main() {
 
 		// Add-ons por tenant — nested bajo /tenants/{tenantId}/addons
 		r.Mount("/tenants/{tenantId}/addons", controllers.TenantAddonRoutes())
+
+		// Certificado DGI global
+		r.Mount("/platform/dgi-cert", controllers.PlatformCertRoutes())
 	})
 
 	// Rutas internas (service-to-service, protegidas con X-Internal-Key)
 	r.Get("/internal/rates", controllers.InternalRatesAuth(controllers.GetRates))
 	r.Post("/internal/rates/sync", controllers.InternalRatesAuth(controllers.TriggerRateSync))
 	r.Get("/internal/tenant-addons-by-schema/{schema}", controllers.InternalRatesAuth(controllers.GetActiveAddonsBySchema))
+	r.Get("/internal/dgi-cert", controllers.InternalRatesAuth(controllers.GetInternalDGICert))
 
 	// Health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {

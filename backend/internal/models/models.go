@@ -149,3 +149,18 @@ type TenantUsage struct {
 func (TenantUsage) TableName() string {
 	return "tenant_usages"
 }
+
+// PlatformDGICert almacena el certificado DGI global de la plataforma.
+// Se usa para el servicio de consulta de RUT (compartido entre todos los tenants).
+// Solo puede haber un registro activo a la vez (ID=1, upsert).
+type PlatformDGICert struct {
+	ID              uint       `json:"id" gorm:"primaryKey;autoIncrement"`
+	CertB64Enc      string     `json:"-" gorm:"type:text"`  // PKCS12 encriptado con AES-256-GCM
+	CertPasswordEnc string     `json:"-" gorm:"type:text"`  // Contraseña encriptada
+	ExpiresAt       *time.Time `json:"expires_at"`
+	SubjectName     string     `json:"subject_name"`
+	SubjectRUT      string     `json:"subject_rut"`
+	UploadedAt      time.Time  `json:"uploaded_at"`
+	UploadedBy      string     `json:"uploaded_by"` // email del admin
+	UpdatedAt       time.Time  `json:"updated_at"`
+}

@@ -66,6 +66,8 @@ func autoMigrate() {
 		// Add-ons e-commerce
 		&models.ECommerceAddon{},
 		&models.TenantAddonSubscription{},
+		// Certificado DGI global
+		&models.PlatformDGICert{},
 	)
 	if err != nil {
 		log.Fatalf("Error en AutoMigrate: %v", err)
