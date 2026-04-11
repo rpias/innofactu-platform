@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function Login() {
@@ -105,8 +105,12 @@ export default function Login() {
           </form>
         </div>
 
-        <p style={{ textAlign: 'center', marginTop: 20, fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-          InnoFactu Platform — Panel Privado
+        <p style={{ textAlign: 'center', marginTop: 16, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+          ¿No tenés cuenta?{' '}
+          <Link to="/register" style={{ color: '#818cf8', fontWeight: 600 }}>Registrarse gratis</Link>
+        </p>
+        <p style={{ textAlign: 'center', marginTop: 8, fontSize: '0.72rem', color: 'var(--text-muted)', opacity: 0.6 }}>
+          InnoFactu Platform
         </p>
       </div>
     </div>

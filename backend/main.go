@@ -59,6 +59,9 @@ func main() {
 
 	// Rutas de la API
 	r.Route("/api", func(r chi.Router) {
+		// Registro público (sin auth)
+		r.Post("/register", controllers.RegisterTenant)
+
 		r.Mount("/auth", controllers.AuthRoutes())
 		r.Mount("/plans", controllers.PlanRoutes())
 		r.Mount("/tenants", controllers.TenantRoutes())

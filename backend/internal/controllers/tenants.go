@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"platform/internal/database"
 	"platform/internal/models"
@@ -643,6 +644,97 @@ func UploadTenantLogo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
+}
+
+// RegisterTenant — POST /api/register (público, sin auth)
+// Permite el self-service onboarding: un usuario crea su cuenta de empresa directamente.
+func RegisterTenant(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		CompanyName string `json:"company_name"`
+		RUT         string `json:"rut"`
+		AdminEmail  string `json:"admin_email"`
+		AdminName   string `json:"admin_name"`
+		PlanCode    string `json:"plan_code"` // opcional, default "starter"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, `{"error":"Datos inválidos"}`, http.StatusBadRequest)
+		return
+	}
+	if body.CompanyName == "" || body.AdminEmail == "" {
+		http.Error(w, `{"error":"company_name y admin_email son obligatorios"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Verificar que el email no esté ya registrado
+	var existing models.Tenant
+	if err := database.DB.Where("admin_email = ?", body.AdminEmail).First(&existing).Error; err == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Ya existe una cuenta registrada con ese email"})
+		return
+	}
+
+	// Plan por defecto
+	planCode := body.PlanCode
+	if planCode == "" {
+		planCode = "starter"
+	}
+	var plan models.Plan
+	if err := database.DB.Where("code = ? AND is_active = true", planCode).First(&plan).Error; err != nil {
+		// fallback al primer plan activo
+		database.DB.Where("is_active = true").Order("sort_order").First(&plan)
+	}
+
+	// Generar slug único
+	slug := slugifyTenant(body.CompanyName)
+	var count int64
+	database.DB.Model(&models.Tenant{}).Where("slug LIKE ?", slug+"%").Count(&count)
+	if count > 0 {
+		slug = fmt.Sprintf("%s%d", slug, count+1)
+	}
+
+	trialEnd := time.Now().AddDate(0, 0, 14)
+	tenant := models.Tenant{
+		Slug:        slug,
+		CompanyName: body.CompanyName,
+		RUT:         body.RUT,
+		PlanID:      plan.ID,
+		Status:      "trial",
+		TrialEndsAt: &trialEnd,
+		DBSchema:    "t_" + strings.ReplaceAll(slug, "-", "_"),
+		AdminEmail:  body.AdminEmail,
+		AdminName:   body.AdminName,
+		Region:      "uy",
+		Timezone:    "America/Montevideo",
+	}
+
+	if err := database.DB.Create(&tenant).Error; err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Error creando cuenta"})
+		return
+	}
+
+	// Provisionar en ERP (genera contraseña segura si no viene)
+	adminPwd := utils.GenerateSecurePassword(16)
+	erpResult, err := provisionInERP(tenant, planCode, adminPwd)
+	if err != nil {
+		log.Printf("[register] ERP provisioning failed for %s: %v", tenant.Slug, err)
+		// No bloqueamos — el admin puede reprovisionarlo
+	} else if erpResult != nil && erpResult.AdminPassword != "" {
+		adminPwd = erpResult.AdminPassword
+	}
+
+	database.DB.Preload("Plan").First(&tenant, "id = ?", tenant.ID)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"tenant":      tenant,
+		"trial_days":  14,
+		"login_email": body.AdminEmail,
+		"message":     "Cuenta creada exitosamente. Revisá tu email para acceder.",
+	})
 }
 
 func TenantRoutes() chi.Router {
