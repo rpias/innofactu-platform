@@ -77,6 +77,9 @@ func main() {
 
 		// Certificado DGI global
 		r.Mount("/platform/dgi-cert", controllers.PlatformCertRoutes())
+
+		// Sistema de menú dinámico
+		r.Mount("/menu", controllers.MenuRoutes())
 	})
 
 	// Rutas internas (service-to-service, protegidas con X-Internal-Key)

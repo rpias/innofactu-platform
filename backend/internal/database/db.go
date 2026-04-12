@@ -68,12 +68,18 @@ func autoMigrate() {
 		&models.TenantAddonSubscription{},
 		// Certificado DGI global
 		&models.PlatformDGICert{},
+		// Sistema de menú dinámico
+		&models.MenuItem{},
+		&models.PlanMenuItem{},
+		&models.TenantMenuOverride{},
+		&models.RoleMenuItem{},
 	)
 	if err != nil {
 		log.Fatalf("Error en AutoMigrate: %v", err)
 	}
 	log.Println("AutoMigrate completado")
 	seedECommerceAddons()
+	seedMenuItems()
 }
 
 func seedECommerceAddons() {
@@ -259,4 +265,182 @@ func SeedData() {
 			log.Println("Super admin creado: admin@innofactu.com / Admin2024!")
 		}
 	}
+}
+
+// ── Seed de Menú ──────────────────────────────────────────────────────────────
+
+func seedMenuItems() {
+	var count int64
+	DB.Model(&models.MenuItem{}).Count(&count)
+	if count > 0 {
+		return
+	}
+
+	// Definición completa de los ítems del ERP
+	type itemDef struct {
+		Key          string
+		Label        string
+		Icon         string
+		Path         string
+		Section      string
+		SectionLabel string
+		SortOrder    int
+		ReqFeature   string
+		DefaultRoles string // JSON array
+		BadgeKey     string
+	}
+
+	items := []itemDef{
+		// ── Sin sección ───────────────────────────────
+		{Key: "dashboard", Label: "Página principal", Icon: "LayoutDashboard", Path: "/", Section: "", SectionLabel: "", SortOrder: 0, DefaultRoles: `["admin","user"]`},
+
+		// ── Facturación ───────────────────────────────
+		{Key: "billing", Label: "Facturador", Icon: "Receipt", Path: "/billing", Section: "facturacion", SectionLabel: "Facturación", SortOrder: 10, DefaultRoles: `["admin","user"]`},
+		{Key: "invoices", Label: "Diario de Ventas", Icon: "ClipboardList", Path: "/invoices", Section: "facturacion", SectionLabel: "Facturación", SortOrder: 11, DefaultRoles: `["admin","user"]`},
+		{Key: "purchases", Label: "Compras", Icon: "ShoppingCart", Path: "/purchases", Section: "facturacion", SectionLabel: "Facturación", SortOrder: 12, DefaultRoles: `["admin","user"]`},
+		{Key: "purchases.history", Label: "Historial Compras", Icon: "ClipboardList", Path: "/purchases/history", Section: "facturacion", SectionLabel: "Facturación", SortOrder: 13, DefaultRoles: `["admin","user"]`},
+		{Key: "cash", Label: "Tesorería / Caja", Icon: "Wallet", Path: "/cash", Section: "facturacion", SectionLabel: "Facturación", SortOrder: 14, DefaultRoles: `["admin","user"]`},
+
+		// ── Stock ─────────────────────────────────────
+		{Key: "inventory", Label: "Catálogo de Artículos", Icon: "Package", Path: "/inventory", Section: "stock", SectionLabel: "Stock", SortOrder: 20, DefaultRoles: `["admin","user"]`, BadgeKey: ""},
+		{Key: "article-families", Label: "Tipos de Artículo", Icon: "Layers", Path: "/article-families", Section: "stock", SectionLabel: "Stock", SortOrder: 21, DefaultRoles: `["admin","user"]`},
+		{Key: "brands-units", Label: "Marcas y Unidades", Icon: "Tag", Path: "/brands-units", Section: "stock", SectionLabel: "Stock", SortOrder: 22, DefaultRoles: `["admin"]`},
+		{Key: "stock-adjust", Label: "Ajuste de Stock", Icon: "ArrowUpDown", Path: "/stock-adjust", Section: "stock", SectionLabel: "Stock", SortOrder: 23, DefaultRoles: `["admin","user"]`},
+		{Key: "stock-report", Label: "Informes de Stock", Icon: "TrendingDown", Path: "/stock-report", Section: "stock", SectionLabel: "Stock", SortOrder: 24, DefaultRoles: `["admin","user"]`},
+
+		// ── Administración ────────────────────────────
+		{Key: "accounting", Label: "Contabilidad", Icon: "BookOpen", Path: "/accounting", Section: "administracion", SectionLabel: "Administración", SortOrder: 30, DefaultRoles: `["admin"]`},
+		{Key: "reports", Label: "Reportes", Icon: "BarChart2", Path: "/reports", Section: "administracion", SectionLabel: "Administración", SortOrder: 31, ReqFeature: "advanced_reports", DefaultRoles: `["admin"]`},
+		{Key: "contacts", Label: "Contactos", Icon: "Users", Path: "/contacts", Section: "administracion", SectionLabel: "Administración", SortOrder: 32, DefaultRoles: `["admin","user"]`},
+		{Key: "users", Label: "Usuarios", Icon: "UserCog", Path: "/users", Section: "administracion", SectionLabel: "Administración", SortOrder: 33, DefaultRoles: `["admin"]`},
+
+		// ── Herramientas ──────────────────────────────
+		{Key: "price-lists", Label: "Listas de Precios", Icon: "Tag", Path: "/price-lists", Section: "herramientas", SectionLabel: "Herramientas", SortOrder: 40, DefaultRoles: `["admin"]`},
+		{Key: "currencies", Label: "Organizar Divisas", Icon: "DollarSign", Path: "/currencies", Section: "herramientas", SectionLabel: "Herramientas", SortOrder: 41, DefaultRoles: `["admin"]`},
+		{Key: "import", Label: "Importar / Exportar", Icon: "FileSpreadsheet", Path: "/import", Section: "herramientas", SectionLabel: "Herramientas", SortOrder: 42, ReqFeature: "api_access", DefaultRoles: `["admin"]`},
+		{Key: "efactura", Label: "e-Factura DGI", Icon: "Zap", Path: "/efactura", Section: "herramientas", SectionLabel: "Herramientas", SortOrder: 43, ReqFeature: "efactura", DefaultRoles: `["admin"]`},
+		{Key: "integraciones", Label: "Integraciones E-Commerce", Icon: "Globe", Path: "/integraciones", Section: "herramientas", SectionLabel: "Herramientas", SortOrder: 44, DefaultRoles: `["admin"]`},
+		{Key: "settings", Label: "Configuración", Icon: "Settings", Path: "/settings", Section: "herramientas", SectionLabel: "Herramientas", SortOrder: 45, DefaultRoles: `["admin"]`},
+	}
+
+	var menuItems []models.MenuItem
+	for _, d := range items {
+		menuItems = append(menuItems, models.MenuItem{
+			AppCode:      "erp",
+			Key:          d.Key,
+			Label:        d.Label,
+			Icon:         d.Icon,
+			Path:         d.Path,
+			Section:      d.Section,
+			SectionLabel: d.SectionLabel,
+			SortOrder:    d.SortOrder,
+			RequiredFeature: d.ReqFeature,
+			DefaultRoles: d.DefaultRoles,
+			BadgeKey:     d.BadgeKey,
+			IsActive:     true,
+		})
+	}
+
+	if err := DB.Create(&menuItems).Error; err != nil {
+		log.Printf("[menu] Error creando menu_items: %v", err)
+		return
+	}
+	log.Printf("[menu] %d menu_items del ERP creados", len(menuItems))
+
+	// Cargar el mapa key → ID para el seed de plan_menu_items
+	itemMap := make(map[string]uint)
+	var saved []models.MenuItem
+	DB.Where("app_code = ?", "erp").Find(&saved)
+	for _, it := range saved {
+		itemMap[it.Key] = it.ID
+	}
+
+	// ── Visibilidad por plan ───────────────────────────────────────────────────
+	// basico: excluye accounting, reports, price-lists, import, integraciones
+	basico := map[string]bool{
+		"dashboard": true, "billing": true, "invoices": true, "purchases": true,
+		"purchases.history": true, "cash": true, "inventory": true, "article-families": true,
+		"brands-units": true, "stock-adjust": true, "stock-report": true,
+		"accounting": false, "reports": false, "contacts": true, "users": true,
+		"price-lists": false, "currencies": true, "import": false,
+		"efactura": true, "integraciones": false, "settings": true,
+	}
+	// profesional: todo excepto nada (acceso completo)
+	profesional := map[string]bool{
+		"dashboard": true, "billing": true, "invoices": true, "purchases": true,
+		"purchases.history": true, "cash": true, "inventory": true, "article-families": true,
+		"brands-units": true, "stock-adjust": true, "stock-report": true,
+		"accounting": true, "reports": true, "contacts": true, "users": true,
+		"price-lists": true, "currencies": true, "import": true,
+		"efactura": true, "integraciones": true, "settings": true,
+	}
+	// empresarial: igual a profesional (acceso completo)
+	empresarial := profesional
+
+	planVisibility := map[string]map[string]bool{
+		"basico":      basico,
+		"profesional": profesional,
+		"empresarial": empresarial,
+	}
+
+	var planItems []models.PlanMenuItem
+	for planCode, visMap := range planVisibility {
+		for key, visible := range visMap {
+			id, ok := itemMap[key]
+			if !ok {
+				continue
+			}
+			planItems = append(planItems, models.PlanMenuItem{
+				PlanCode:   planCode,
+				MenuItemID: id,
+				IsVisible:  visible,
+			})
+		}
+	}
+	if err := DB.Create(&planItems).Error; err != nil {
+		log.Printf("[menu] Error creando plan_menu_items: %v", err)
+		return
+	}
+	log.Printf("[menu] %d plan_menu_items creados", len(planItems))
+
+	// ── Visibilidad por rol ────────────────────────────────────────────────────
+	// admin: ve todo
+	// user: ve menos (sin accounting, users, brands-units, price-lists, currencies, import, efactura, integraciones, settings)
+	adminItems := []string{
+		"dashboard", "billing", "invoices", "purchases", "purchases.history", "cash",
+		"inventory", "article-families", "brands-units", "stock-adjust", "stock-report",
+		"accounting", "reports", "contacts", "users",
+		"price-lists", "currencies", "import", "efactura", "integraciones", "settings",
+	}
+	userItems := []string{
+		"dashboard", "billing", "invoices", "purchases", "purchases.history", "cash",
+		"inventory", "article-families", "stock-adjust", "stock-report", "contacts",
+	}
+
+	roleVisMap := map[string][]string{
+		"admin": adminItems,
+		"user":  userItems,
+	}
+
+	// Construir set de visibles por rol
+	var roleItems []models.RoleMenuItem
+	for role, visibleKeys := range roleVisMap {
+		visSet := make(map[string]bool)
+		for _, k := range visibleKeys {
+			visSet[k] = true
+		}
+		for _, item := range saved {
+			roleItems = append(roleItems, models.RoleMenuItem{
+				AppCode:    "erp",
+				Role:       role,
+				MenuItemID: item.ID,
+				IsVisible:  visSet[item.Key],
+			})
+		}
+	}
+	if err := DB.Create(&roleItems).Error; err != nil {
+		log.Printf("[menu] Error creando role_menu_items: %v", err)
+		return
+	}
+	log.Printf("[menu] %d role_menu_items creados", len(roleItems))
 }
