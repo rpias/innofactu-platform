@@ -9,6 +9,7 @@ import TenantDetail from './pages/TenantDetail'
 import Plans from './pages/Plans'
 import Support from './pages/Support'
 import TicketDetail from './pages/TicketDetail'
+import Menu from './pages/Menu'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token, loading } = useAuth()
@@ -43,6 +44,7 @@ function AppRoutes() {
         <Route path="plans" element={<Plans />} />
         <Route path="support" element={<Support />} />
         <Route path="support/:id" element={<TicketDetail />} />
+        <Route path="menu" element={<Menu />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

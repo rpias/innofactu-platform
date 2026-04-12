@@ -6,6 +6,7 @@ import {
   Headphones,
   Settings,
   LogOut,
+  LayoutList,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
@@ -55,6 +56,7 @@ export default function AdminLayout() {
           <NavItem to="/tenants" icon={<Building2 size={16} />} label="Empresas" />
           <NavItem to="/plans" icon={<CreditCard size={16} />} label="Planes" />
           <NavItem to="/support" icon={<Headphones size={16} />} label="Soporte" />
+          <NavItem to="/menu" icon={<LayoutList size={16} />} label="Menú" />
 
           <div style={{ height: 1, background: 'var(--sidebar-border)', margin: '10px 8px' }} />
 

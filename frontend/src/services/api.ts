@@ -14,6 +14,10 @@ import type {
   InvoiceType,
   CAERange,
   CAEParseResult,
+  MenuItem,
+  MenuItemWithVisibility,
+  MenuItemResolved,
+  RoleMenuItem,
 } from '../types'
 
 const api = axios.create({
@@ -233,6 +237,47 @@ export const addons = {
 
   cancel: (tenantId: string, subId: number): Promise<void> =>
     api.delete(`/tenants/${tenantId}/addons/${subId}`).then(() => undefined),
+}
+
+// ── Menú dinámico ─────────────────────────────────────────────────────────────
+
+export const menu = {
+  // Catálogo maestro
+  listItems: (appCode?: string): Promise<MenuItem[]> =>
+    api.get('/menu/items', { params: appCode ? { app: appCode } : {} }).then((r) => r.data ?? []),
+
+  createItem: (data: Partial<MenuItem>): Promise<MenuItem> =>
+    api.post('/menu/items', data).then((r) => r.data),
+
+  updateItem: (id: number, data: Partial<MenuItem>): Promise<MenuItem> =>
+    api.put(`/menu/items/${id}`, data).then((r) => r.data),
+
+  deleteItem: (id: number): Promise<void> =>
+    api.delete(`/menu/items/${id}`).then(() => undefined),
+
+  // Por plan
+  getPlanMenu: (planCode: string, appCode?: string): Promise<MenuItemWithVisibility[]> =>
+    api.get(`/menu/plan/${planCode}`, { params: appCode ? { app: appCode } : {} }).then((r) => r.data ?? []),
+
+  setPlanMenuItem: (planCode: string, itemId: number, isVisible: boolean): Promise<void> =>
+    api.put(`/menu/plan/${planCode}/${itemId}`, { is_visible: isVisible }).then(() => undefined),
+
+  // Por tenant
+  getTenantMenu: (tenantId: string, appCode?: string): Promise<MenuItemResolved[]> =>
+    api.get(`/menu/tenant/${tenantId}`, { params: appCode ? { app: appCode } : {} }).then((r) => r.data ?? []),
+
+  setTenantMenuOverride: (tenantId: string, itemId: number, isVisible: boolean, notes?: string): Promise<void> =>
+    api.put(`/menu/tenant/${tenantId}/${itemId}`, { is_visible: isVisible, overridden_by: 'platform_admin', notes: notes ?? '' }).then(() => undefined),
+
+  deleteTenantMenuOverride: (tenantId: string, itemId: number): Promise<void> =>
+    api.delete(`/menu/tenant/${tenantId}/${itemId}`).then(() => undefined),
+
+  // Por rol
+  getRoleMenu: (appCode: string): Promise<RoleMenuItem[]> =>
+    api.get(`/menu/role/${appCode}`).then((r) => r.data ?? []),
+
+  setRoleMenuItem: (appCode: string, role: string, itemId: number, isVisible: boolean): Promise<void> =>
+    api.put(`/menu/role/${appCode}/${role}/${itemId}`, { is_visible: isVisible }).then(() => undefined),
 }
 
 export default api

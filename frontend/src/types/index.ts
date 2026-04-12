@@ -203,3 +203,43 @@ export interface CAEParseResult {
   cantidad: number
   warning?: string
 }
+
+// ── Menu dinámico ─────────────────────────────────────────────────────────────
+
+export interface MenuItem {
+  id: number
+  app_code: string
+  key: string
+  label: string
+  icon: string
+  path: string
+  section: string
+  section_label: string
+  sort_order: number
+  parent_id: number | null
+  required_feature: string
+  required_addon: string
+  default_roles: string
+  badge_key: string
+  description: string
+  is_active: boolean
+}
+
+export interface MenuItemWithVisibility extends MenuItem {
+  is_visible_in_plan: boolean
+}
+
+export interface MenuItemResolved extends MenuItem {
+  visible_by_plan: boolean
+  has_tenant_override: boolean
+  tenant_override: boolean | null
+  effective_visible: boolean
+}
+
+export interface RoleMenuItem {
+  app_code: string
+  role: string
+  menu_item_id: number
+  is_visible: boolean
+  menu_item?: MenuItem
+}

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Copy, KeyRound, RefreshCw, Upload, FileText, ChevronRight, Trash2, X } from 'lucide-react'
-import { tenants as tenantsApi, plans as plansApi, support as supportApi, erpOrigin, addons as addonsApi, type ECommerceAddon, type TenantAddonSubscription } from '../services/api'
-import type { Tenant, Plan, SupportTicket, CAERange, CAEParseResult, InvoiceType } from '../types'
+import { tenants as tenantsApi, plans as plansApi, support as supportApi, erpOrigin, addons as addonsApi, menu as menuApi, type ECommerceAddon, type TenantAddonSubscription } from '../services/api'
+import type { Tenant, Plan, SupportTicket, CAERange, CAEParseResult, InvoiceType, MenuItemResolved } from '../types'
 import CertPanel from '../components/CertPanel'
 
-type Tab = 'info' | 'soporte' | 'suscripcion' | 'uso' | 'cert' | 'cae' | 'integraciones'
+type Tab = 'info' | 'soporte' | 'suscripcion' | 'uso' | 'cert' | 'cae' | 'integraciones' | 'menu'
 
 const STATUS_BADGE: Record<string, string> = {
   trial: 'badge-yellow', active: 'badge-green', suspended: 'badge-red', cancelled: 'badge-gray',
@@ -283,13 +283,13 @@ export default function TenantDetail() {
 
       {/* Tabs */}
       <div className="tabs">
-        {(['info', 'soporte', 'suscripcion', 'uso', 'cert', 'cae', 'integraciones'] as Tab[]).map((t) => (
+        {(['info', 'soporte', 'suscripcion', 'uso', 'cert', 'cae', 'integraciones', 'menu'] as Tab[]).map((t) => (
           <button
             key={t}
             className={`tab-btn ${tab === t ? 'active' : ''}`}
             onClick={() => { setTab(t); if (t === 'cae') loadCAE(); if (t === 'integraciones') loadIntegraciones() }}
           >
-            {t === 'info' ? 'Información' : t === 'soporte' ? 'Soporte' : t === 'suscripcion' ? 'Suscripción' : t === 'uso' ? 'Uso' : t === 'cert' ? '🔐 Certificado DGI' : t === 'cae' ? '⚡ CAE' : '🛒 Integraciones'}
+            {t === 'info' ? 'Información' : t === 'soporte' ? 'Soporte' : t === 'suscripcion' ? 'Suscripción' : t === 'uso' ? 'Uso' : t === 'cert' ? '🔐 Certificado DGI' : t === 'cae' ? '⚡ CAE' : t === 'integraciones' ? '🛒 Integraciones' : '🗂️ Menú'}
           </button>
         ))}
       </div>
@@ -927,6 +927,11 @@ export default function TenantDetail() {
         </div>
       )}
 
+      {/* Tab: Menú */}
+      {tab === 'menu' && id && (
+        <TenantMenuTab tenantId={id} planCode={tenant.plan?.code ?? ''} />
+      )}
+
       {/* Modal — Show reset credentials */}
       {resetCredentials && (
         <ResetPasswordModal
@@ -1050,6 +1055,161 @@ function ResetPasswordModal({
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <button className="btn btn-primary" onClick={onClose}>Entendido, cerrar</button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── TenantMenuTab ─────────────────────────────────────────────────────────────
+
+function TenantMenuTab({ tenantId, planCode }: { tenantId: string; planCode: string }) {
+  const [items, setItems] = useState<MenuItemResolved[]>([])
+  const [loading, setLoading] = useState(true)
+  const [toggling, setToggling] = useState<number | null>(null)
+  const [removing, setRemoving] = useState<number | null>(null)
+
+  const load = () => {
+    setLoading(true)
+    menuApi.getTenantMenu(tenantId, 'erp').then(setItems).finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [tenantId])
+
+  const handleOverride = async (itemId: number, currentEffective: boolean) => {
+    setToggling(itemId)
+    try {
+      await menuApi.setTenantMenuOverride(tenantId, itemId, !currentEffective)
+      setItems((prev) =>
+        prev.map((i) =>
+          i.id === itemId
+            ? { ...i, has_tenant_override: true, tenant_override: !currentEffective, effective_visible: !currentEffective }
+            : i
+        )
+      )
+    } finally {
+      setToggling(null)
+    }
+  }
+
+  const handleRemoveOverride = async (itemId: number) => {
+    setRemoving(itemId)
+    try {
+      await menuApi.deleteTenantMenuOverride(tenantId, itemId)
+      setItems((prev) =>
+        prev.map((i) =>
+          i.id === itemId
+            ? { ...i, has_tenant_override: false, tenant_override: null, effective_visible: i.visible_by_plan }
+            : i
+        )
+      )
+    } finally {
+      setRemoving(null)
+    }
+  }
+
+  const sections = Array.from(new Set(items.map((i) => i.section || 'general')))
+
+  if (loading) return <div style={{ color: 'var(--text-muted)', padding: 32 }}>Cargando menú...</div>
+
+  return (
+    <div>
+      <div style={{
+        padding: '10px 16px',
+        background: 'var(--accent-light)',
+        borderRadius: 8,
+        fontSize: '0.82rem',
+        color: 'var(--text-secondary)',
+        marginBottom: 20,
+      }}>
+        Override de visibilidad de menú para este tenant. Los cambios aquí sobreescriben la configuración del plan <strong>{planCode}</strong>.
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        {sections.map((section) => {
+          const sectionItems = items.filter((i) => (i.section || 'general') === section)
+          if (sectionItems.length === 0) return null
+          return (
+            <div key={section}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 8 }}>
+                {sectionItems[0]?.section_label || section}
+              </div>
+              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <tbody>
+                    {sectionItems.map((item) => (
+                      <tr key={item.id} style={{ borderBottom: '1px solid var(--card-border)' }}>
+                        <td style={{ padding: '10px 16px', width: 44 }}>
+                          {item.effective_visible
+                            ? <span style={{ color: '#6366f1', fontSize: 16 }}>👁</span>
+                            : <span style={{ color: '#64748b', fontSize: 16 }}>🚫</span>
+                          }
+                        </td>
+                        <td style={{ padding: '10px 16px', flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>{item.label}</span>
+                            {item.has_tenant_override && (
+                              <span className="badge badge-yellow" style={{ fontSize: '0.68rem' }}>override</span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: 8, marginTop: 2, fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                            <span>Plan: {item.visible_by_plan ? '✓ visible' : '✗ oculto'}</span>
+                            {item.has_tenant_override && (
+                              <span>Override: {item.tenant_override ? '✓ visible' : '✗ oculto'}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px 16px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'flex-end' }}>
+                            {item.has_tenant_override && (
+                              <button
+                                className="btn btn-ghost"
+                                onClick={() => handleRemoveOverride(item.id)}
+                                disabled={removing === item.id}
+                                style={{ fontSize: '0.72rem', padding: '4px 8px', color: 'var(--text-muted)' }}
+                                title="Quitar override (vuelve al default del plan)"
+                              >
+                                {removing === item.id ? '...' : 'Quitar override'}
+                              </button>
+                            )}
+                            {/* Toggle switch */}
+                            <button
+                              onClick={() => handleOverride(item.id, item.effective_visible)}
+                              disabled={toggling === item.id}
+                              style={{
+                                width: 38,
+                                height: 22,
+                                borderRadius: 11,
+                                border: 'none',
+                                background: item.effective_visible ? '#6366f1' : 'var(--card-border)',
+                                position: 'relative',
+                                cursor: toggling === item.id ? 'wait' : 'pointer',
+                                transition: 'background 0.2s',
+                                flexShrink: 0,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  position: 'absolute',
+                                  top: 3,
+                                  left: item.effective_visible ? 19 : 3,
+                                  width: 16,
+                                  height: 16,
+                                  borderRadius: '50%',
+                                  background: '#fff',
+                                  transition: 'left 0.2s',
+                                }}
+                              />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
