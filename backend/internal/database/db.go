@@ -53,6 +53,87 @@ func ConnectDB() {
 	SeedData()
 }
 
+// seedPlatformMenuItems inserta los ítems del app "platform".
+// Se ejecuta siempre, verificando por app_code para no duplicar.
+func seedPlatformMenuItems() {
+	var count int64
+	DB.Model(&models.MenuItem{}).Where("app_code = ?", "platform").Count(&count)
+	if count > 0 {
+		return
+	}
+
+	type itemDef struct {
+		Key          string
+		Label        string
+		Icon         string
+		Path         string
+		Section      string
+		SectionLabel string
+		SortOrder    int
+	}
+
+	// Todos los ítems del Platform son exclusivos de super_admin por defecto.
+	// Agregar más roles en DefaultRoles cuando sea necesario (ej: "super_admin,admin").
+	const defaultRoles = "super_admin"
+
+	items := []itemDef{
+		// ── General ──────────────────────────────────────
+		{Key: "platform.dashboard", Label: "Dashboard", Icon: "LayoutDashboard", Path: "/", Section: "general", SectionLabel: "General", SortOrder: 0},
+
+		// ── Gestión ──────────────────────────────────────
+		{Key: "platform.tenants", Label: "Empresas", Icon: "Building2", Path: "/tenants", Section: "gestion", SectionLabel: "Gestión", SortOrder: 10},
+		{Key: "platform.plans", Label: "Planes", Icon: "CreditCard", Path: "/plans", Section: "gestion", SectionLabel: "Gestión", SortOrder: 11},
+		{Key: "platform.support", Label: "Soporte", Icon: "Headphones", Path: "/support", Section: "gestion", SectionLabel: "Gestión", SortOrder: 12},
+
+		// ── Sistema ──────────────────────────────────────
+		{Key: "platform.menu", Label: "Menú Dinámico", Icon: "LayoutList", Path: "/menu", Section: "sistema", SectionLabel: "Sistema", SortOrder: 20},
+		{Key: "platform.settings", Label: "Configuración", Icon: "Settings", Path: "/settings", Section: "sistema", SectionLabel: "Sistema", SortOrder: 21},
+	}
+
+	var menuItems []models.MenuItem
+	for _, d := range items {
+		menuItems = append(menuItems, models.MenuItem{
+			AppCode:      "platform",
+			Key:          d.Key,
+			Label:        d.Label,
+			Icon:         d.Icon,
+			Path:         d.Path,
+			Section:      d.Section,
+			SectionLabel: d.SectionLabel,
+			SortOrder:    d.SortOrder,
+			DefaultRoles: defaultRoles,
+			IsActive:     true,
+		})
+	}
+
+	if err := DB.Create(&menuItems).Error; err != nil {
+		log.Printf("[menu] Error creando menu_items del Platform: %v", err)
+		return
+	}
+	log.Printf("[menu] %d menu_items del Platform creados", len(menuItems))
+
+	// Cargar IDs recién creados
+	var saved []models.MenuItem
+	DB.Where("app_code = ?", "platform").Find(&saved)
+
+	// ── Visibilidad por rol: super_admin ve todo ──────────────────────────────
+	// Agregar entradas para otros roles aquí cuando se necesiten.
+	var roleItems []models.RoleMenuItem
+	for _, item := range saved {
+		roleItems = append(roleItems, models.RoleMenuItem{
+			AppCode:    "platform",
+			Role:       "super_admin",
+			MenuItemID: item.ID,
+			IsVisible:  true,
+		})
+	}
+	if err := DB.Create(&roleItems).Error; err != nil {
+		log.Printf("[menu] Error creando role_menu_items del Platform: %v", err)
+		return
+	}
+	log.Printf("[menu] %d role_menu_items del Platform creados", len(roleItems))
+}
+
 func autoMigrate() {
 	err := DB.AutoMigrate(
 		&models.Plan{},
@@ -80,6 +161,7 @@ func autoMigrate() {
 	log.Println("AutoMigrate completado")
 	seedECommerceAddons()
 	seedMenuItems()
+	seedPlatformMenuItems()
 }
 
 func seedECommerceAddons() {

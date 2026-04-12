@@ -17,9 +17,14 @@ type Tab = 'catalogo' | 'plan' | 'roles'
 
 const APP_OPTIONS = [
   { value: 'erp', label: 'ERP (InnoFactu)' },
+  { value: 'platform', label: 'Platform (Admin)' },
 ]
 
-const ROLE_OPTIONS = ['admin', 'user', 'contador', 'vendedor']
+// Roles disponibles por app. Agregar nuevos roles acá cuando se necesiten.
+const ROLES_BY_APP: Record<string, string[]> = {
+  erp:      ['admin', 'user', 'contador', 'vendedor'],
+  platform: ['super_admin'],
+}
 
 const SECTION_OPTIONS = [
   'ventas', 'compras', 'caja', 'contabilidad', 'articulos', 'reportes', 'configuracion', 'integraciones',
@@ -78,14 +83,31 @@ function ToggleSwitch({
 
 export default function Menu() {
   const [tab, setTab] = useState<Tab>('catalogo')
+  const [appFilter, setAppFilter] = useState('erp')
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-        <LayoutList size={20} color="#818cf8" />
-        <h1 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-          Menú Dinámico
-        </h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <LayoutList size={20} color="#818cf8" />
+          <h1 style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+            Menú Dinámico
+          </h1>
+        </div>
+
+        {/* Selector de app — global, compartido entre tabs */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Aplicación:</span>
+          <select
+            value={appFilter}
+            onChange={(e) => setAppFilter(e.target.value)}
+            style={{ padding: '6px 12px', fontSize: '0.83rem', borderRadius: 6, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-primary)', fontWeight: 600 }}
+          >
+            {APP_OPTIONS.map((a) => (
+              <option key={a.value} value={a.value}>{a.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -116,19 +138,18 @@ export default function Menu() {
         ))}
       </div>
 
-      {tab === 'catalogo' && <CatalogoTab />}
-      {tab === 'plan' && <PlanTab />}
-      {tab === 'roles' && <RolesTab />}
+      {tab === 'catalogo' && <CatalogoTab appFilter={appFilter} />}
+      {tab === 'plan' && <PlanTab appFilter={appFilter} />}
+      {tab === 'roles' && <RolesTab appFilter={appFilter} />}
     </div>
   )
 }
 
 // ── Tab: Catálogo ─────────────────────────────────────────────────────────────
 
-function CatalogoTab() {
+function CatalogoTab({ appFilter }: { appFilter: string }) {
   const [items, setItems] = useState<MenuItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [appFilter, setAppFilter] = useState('erp')
   const [editItem, setEditItem] = useState<MenuItem | null>(null)
   const [showNew, setShowNew] = useState(false)
 
@@ -145,26 +166,14 @@ function CatalogoTab() {
     load()
   }
 
-  // Group by section
   const sections = Array.from(new Set(items.map((i) => i.section || 'general')))
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <select
-            value={appFilter}
-            onChange={(e) => setAppFilter(e.target.value)}
-            style={{ padding: '6px 10px', fontSize: '0.83rem', borderRadius: 6, border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: 'var(--text-primary)' }}
-          >
-            {APP_OPTIONS.map((a) => (
-              <option key={a.value} value={a.value}>{a.label}</option>
-            ))}
-          </select>
-          <button className="btn btn-ghost" onClick={load} style={{ padding: '6px 8px' }}>
-            <RefreshCw size={14} />
-          </button>
-        </div>
+        <button className="btn btn-ghost" onClick={load} style={{ padding: '6px 8px' }}>
+          <RefreshCw size={14} />
+        </button>
         <button className="btn btn-primary" onClick={() => setShowNew(true)} style={{ fontSize: '0.82rem' }}>
           <Plus size={14} /> Nuevo ítem
         </button>
@@ -241,12 +250,11 @@ function CatalogoTab() {
 
 // ── Tab: Por Plan ─────────────────────────────────────────────────────────────
 
-function PlanTab() {
+function PlanTab({ appFilter }: { appFilter: string }) {
   const [plans, setPlans] = useState<Plan[]>([])
   const [items, setItems] = useState<MenuItem[]>([])
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
   const [planItems, setPlanItems] = useState<MenuItemWithVisibility[]>([])
-  const [appFilter] = useState('erp')
   const [loading, setLoading] = useState(false)
   const [toggling, setToggling] = useState<number | null>(null)
 
@@ -258,7 +266,7 @@ function PlanTab() {
         setItems(i)
         if (active.length > 0) setSelectedPlan(active[0])
       })
-  }, [])
+  }, [appFilter])
 
   useEffect(() => {
     if (!selectedPlan) return
@@ -281,8 +289,23 @@ function PlanTab() {
     }
   }
 
-  // Group by section
   const sections = Array.from(new Set(items.map((i) => i.section || 'general')))
+
+  if (appFilter === 'platform') {
+    return (
+      <div style={{
+        padding: '20px 24px',
+        background: 'var(--accent-light)',
+        borderRadius: 10,
+        fontSize: '0.85rem',
+        color: 'var(--text-secondary)',
+        border: '1px solid var(--card-border)',
+      }}>
+        <strong>No aplica para Platform.</strong> La visibilidad por plan es exclusiva del ERP.
+        El acceso al Platform se controla por rol desde la pestaña <em>Por Rol</em>.
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -368,11 +391,11 @@ function PlanTab() {
 
 // ── Tab: Por Rol ──────────────────────────────────────────────────────────────
 
-function RolesTab() {
+function RolesTab({ appFilter }: { appFilter: string }) {
+  const roleOptions = ROLES_BY_APP[appFilter] ?? ['admin', 'user']
   const [items, setItems] = useState<MenuItem[]>([])
   const [roleEntries, setRoleEntries] = useState<RoleMenuItem[]>([])
-  const [appFilter] = useState('erp')
-  const [selectedRole, setSelectedRole] = useState(ROLE_OPTIONS[0])
+  const [selectedRole, setSelectedRole] = useState(roleOptions[0])
   const [loading, setLoading] = useState(false)
   const [toggling, setToggling] = useState<number | null>(null)
 
@@ -383,7 +406,11 @@ function RolesTab() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [])
+  // Al cambiar de app, resetear el rol seleccionado al primero disponible
+  useEffect(() => {
+    setSelectedRole(roleOptions[0])
+    load()
+  }, [appFilter])
 
   // Build lookup: itemId → isVisible for selected role
   const roleMap = new Map<number, boolean>()
@@ -430,7 +457,7 @@ function RolesTab() {
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 20 }}>
         <span style={{ fontSize: '0.83rem', color: 'var(--text-muted)' }}>Rol:</span>
         <div style={{ display: 'flex', gap: 8 }}>
-          {ROLE_OPTIONS.map((r) => (
+          {roleOptions.map((r) => (
             <button
               key={r}
               onClick={() => setSelectedRole(r)}
@@ -454,8 +481,8 @@ function RolesTab() {
             fontSize: '0.82rem',
             color: 'var(--text-secondary)',
           }}>
-            Visibilidad predeterminada de menú para usuarios con rol <strong style={{ textTransform: 'capitalize' }}>{selectedRole}</strong>.
-            El tenant puede aplicar overrides individuales desde su ficha.
+            Visibilidad predeterminada de menú para el rol <strong style={{ textTransform: 'capitalize' }}>{selectedRole.replace('_', ' ')}</strong>.
+            {appFilter === 'erp' && ' El tenant puede aplicar overrides individuales desde su ficha.'}
           </div>
 
           {sections.map((section) => {
