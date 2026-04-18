@@ -51,6 +51,7 @@ func ConnectDB() {
 
 	autoMigrate()
 	SeedData()
+	patchMenuItems()
 }
 
 // seedPlatformMenuItems inserta los ítems del app "platform".
@@ -387,6 +388,7 @@ func seedMenuItems() {
 		{Key: "inventory", Label: "Catálogo de Artículos", Icon: "Package", Path: "/inventory", Section: "stock", SectionLabel: "Stock", SortOrder: 20, DefaultRoles: `["admin","user"]`, BadgeKey: ""},
 		{Key: "article-families", Label: "Tipos de Artículo", Icon: "Layers", Path: "/article-families", Section: "stock", SectionLabel: "Stock", SortOrder: 21, DefaultRoles: `["admin","user"]`},
 		{Key: "brands-units", Label: "Marcas y Unidades", Icon: "Tag", Path: "/brands-units", Section: "stock", SectionLabel: "Stock", SortOrder: 22, DefaultRoles: `["admin"]`},
+		{Key: "variant-catalog", Label: "Catálogo de Variantes", Icon: "Layers", Path: "/variant-catalog", Section: "stock", SectionLabel: "Stock", SortOrder: 23, DefaultRoles: `["admin"]`},
 		{Key: "stock-adjust", Label: "Ajuste de Stock", Icon: "ArrowUpDown", Path: "/stock-adjust", Section: "stock", SectionLabel: "Stock", SortOrder: 23, DefaultRoles: `["admin","user"]`},
 		{Key: "stock-report", Label: "Informes de Stock", Icon: "TrendingDown", Path: "/stock-report", Section: "stock", SectionLabel: "Stock", SortOrder: 24, DefaultRoles: `["admin","user"]`},
 
@@ -442,7 +444,7 @@ func seedMenuItems() {
 	basico := map[string]bool{
 		"dashboard": true, "billing": true, "invoices": true, "purchases": true,
 		"purchases.history": true, "cash": true, "inventory": true, "article-families": true,
-		"brands-units": true, "stock-adjust": true, "stock-report": true,
+		"brands-units": true, "variant-catalog": true, "stock-adjust": true, "stock-report": true,
 		"accounting": false, "reports": false, "contacts": true, "users": true,
 		"price-lists": false, "currencies": true, "import": false,
 		"efactura": true, "integraciones": false, "settings": true,
@@ -451,7 +453,7 @@ func seedMenuItems() {
 	profesional := map[string]bool{
 		"dashboard": true, "billing": true, "invoices": true, "purchases": true,
 		"purchases.history": true, "cash": true, "inventory": true, "article-families": true,
-		"brands-units": true, "stock-adjust": true, "stock-report": true,
+		"brands-units": true, "variant-catalog": true, "stock-adjust": true, "stock-report": true,
 		"accounting": true, "reports": true, "contacts": true, "users": true,
 		"price-lists": true, "currencies": true, "import": true,
 		"efactura": true, "integraciones": true, "settings": true,
@@ -490,7 +492,7 @@ func seedMenuItems() {
 	// user: ve menos (sin accounting, users, brands-units, price-lists, currencies, import, efactura, integraciones, settings)
 	adminItems := []string{
 		"dashboard", "billing", "invoices", "purchases", "purchases.history", "cash",
-		"inventory", "article-families", "brands-units", "stock-adjust", "stock-report",
+		"inventory", "article-families", "brands-units", "variant-catalog", "stock-adjust", "stock-report",
 		"accounting", "reports", "contacts", "users",
 		"price-lists", "currencies", "import", "efactura", "integraciones", "settings",
 	}
@@ -525,4 +527,63 @@ func seedMenuItems() {
 		return
 	}
 	log.Printf("[menu] %d role_menu_items creados", len(roleItems))
+}
+
+// patchMenuItems agrega ítems de menú que falten en instalaciones existentes.
+// Se ejecuta siempre y es idempotente (solo inserta si el key no existe).
+func patchMenuItems() {
+	type patch struct {
+		Key          string
+		Label        string
+		Icon         string
+		Path         string
+		Section      string
+		SectionLabel string
+		SortOrder    int
+		DefaultRoles string
+		Plans        []string // planes que deben poder verlo
+	}
+
+	patches := []patch{
+		{
+			Key: "variant-catalog", Label: "Catálogo de Variantes", Icon: "Layers",
+			Path: "/variant-catalog", Section: "stock", SectionLabel: "Stock",
+			SortOrder: 23, DefaultRoles: `["admin"]`,
+			Plans: []string{"basico", "profesional", "empresarial"},
+		},
+	}
+
+	for _, p := range patches {
+		var existing models.MenuItem
+		if err := DB.Where("app_code = ? AND key = ?", "erp", p.Key).First(&existing).Error; err == nil {
+			continue // ya existe
+		}
+		item := models.MenuItem{
+			AppCode:      "erp",
+			Key:          p.Key,
+			Label:        p.Label,
+			Icon:         p.Icon,
+			Path:         p.Path,
+			Section:      p.Section,
+			SectionLabel: p.SectionLabel,
+			SortOrder:    p.SortOrder,
+			DefaultRoles: p.DefaultRoles,
+			IsActive:     true,
+		}
+		if err := DB.Create(&item).Error; err != nil {
+			log.Printf("[menu patch] Error creando %s: %v", p.Key, err)
+			continue
+		}
+		log.Printf("[menu patch] Ítem creado: %s (id=%d)", p.Key, item.ID)
+
+		// plan_menu_items
+		for _, planCode := range p.Plans {
+			DB.Exec(`INSERT INTO plan_menu_items (plan_code, menu_item_id, is_visible)
+				VALUES (?, ?, true) ON CONFLICT DO NOTHING`, planCode, item.ID)
+		}
+		// role_menu_items — admin visible, user no
+		DB.Exec(`INSERT INTO role_menu_items (app_code, role, menu_item_id, is_visible)
+			VALUES ('erp', 'admin', ?, true), ('erp', 'user', ?, false) ON CONFLICT DO NOTHING`,
+			item.ID, item.ID)
+	}
 }
