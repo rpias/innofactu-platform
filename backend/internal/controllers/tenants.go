@@ -346,9 +346,10 @@ func ResetAdminPassword(w http.ResponseWriter, r *http.Request) {
 
 	// Call ERP internal endpoint to reset
 	payload := map[string]interface{}{
-		"schema":       schema,
-		"email":        tenant.AdminEmail,
-		"new_password": newPassword,
+		"schema":             schema,
+		"email":              tenant.AdminEmail,
+		"new_password":       newPassword,
+		"must_change_password": true,
 	}
 	body, _ := json.Marshal(payload)
 	req, err := http.NewRequest(http.MethodPost, erpInternalURL()+"/reset-user-password", bytes.NewReader(body))
