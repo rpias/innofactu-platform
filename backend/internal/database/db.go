@@ -391,6 +391,7 @@ func seedMenuItems() {
 		{Key: "variant-catalog", Label: "Catálogo de Variantes", Icon: "Layers", Path: "/variant-catalog", Section: "stock", SectionLabel: "Stock", SortOrder: 23, DefaultRoles: `["admin"]`},
 		{Key: "stock-adjust", Label: "Ajuste de Stock", Icon: "ArrowUpDown", Path: "/stock-adjust", Section: "stock", SectionLabel: "Stock", SortOrder: 23, DefaultRoles: `["admin","user"]`},
 		{Key: "stock-report", Label: "Informes de Stock", Icon: "TrendingDown", Path: "/stock-report", Section: "stock", SectionLabel: "Stock", SortOrder: 24, DefaultRoles: `["admin","user"]`},
+		{Key: "stock-variants-report", Label: "Stock de Variedades", Icon: "Layers3", Path: "/stock-variants-report", Section: "stock", SectionLabel: "Stock", SortOrder: 25, DefaultRoles: `["admin","user"]`},
 
 		// ── Administración ────────────────────────────
 		{Key: "accounting", Label: "Contabilidad", Icon: "BookOpen", Path: "/accounting", Section: "administracion", SectionLabel: "Administración", SortOrder: 30, DefaultRoles: `["admin"]`},
@@ -445,6 +446,7 @@ func seedMenuItems() {
 		"dashboard": true, "billing": true, "invoices": true, "purchases": true,
 		"purchases.history": true, "cash": true, "inventory": true, "article-families": true,
 		"brands-units": true, "variant-catalog": true, "stock-adjust": true, "stock-report": true,
+		"stock-variants-report": true,
 		"accounting": false, "reports": false, "contacts": true, "users": true,
 		"price-lists": false, "currencies": true, "import": false,
 		"efactura": true, "integraciones": false, "settings": true,
@@ -454,6 +456,7 @@ func seedMenuItems() {
 		"dashboard": true, "billing": true, "invoices": true, "purchases": true,
 		"purchases.history": true, "cash": true, "inventory": true, "article-families": true,
 		"brands-units": true, "variant-catalog": true, "stock-adjust": true, "stock-report": true,
+		"stock-variants-report": true,
 		"accounting": true, "reports": true, "contacts": true, "users": true,
 		"price-lists": true, "currencies": true, "import": true,
 		"efactura": true, "integraciones": true, "settings": true,
@@ -493,12 +496,13 @@ func seedMenuItems() {
 	adminItems := []string{
 		"dashboard", "billing", "invoices", "purchases", "purchases.history", "cash",
 		"inventory", "article-families", "brands-units", "variant-catalog", "stock-adjust", "stock-report",
+		"stock-variants-report",
 		"accounting", "reports", "contacts", "users",
 		"price-lists", "currencies", "import", "efactura", "integraciones", "settings",
 	}
 	userItems := []string{
 		"dashboard", "billing", "invoices", "purchases", "purchases.history", "cash",
-		"inventory", "article-families", "stock-adjust", "stock-report", "contacts",
+		"inventory", "article-families", "stock-adjust", "stock-report", "stock-variants-report", "contacts",
 	}
 
 	roleVisMap := map[string][]string{
@@ -549,6 +553,12 @@ func patchMenuItems() {
 			Key: "variant-catalog", Label: "Catálogo de Variantes", Icon: "Layers",
 			Path: "/variant-catalog", Section: "stock", SectionLabel: "Stock",
 			SortOrder: 23, DefaultRoles: `["admin"]`,
+			Plans: []string{"basico", "profesional", "empresarial"},
+		},
+		{
+			Key: "stock-variants-report", Label: "Stock de Variedades", Icon: "Layers3",
+			Path: "/stock-variants-report", Section: "stock", SectionLabel: "Stock",
+			SortOrder: 25, DefaultRoles: `["admin","user"]`,
 			Plans: []string{"basico", "profesional", "empresarial"},
 		},
 	}
