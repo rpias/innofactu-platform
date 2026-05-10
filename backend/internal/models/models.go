@@ -54,6 +54,10 @@ type Tenant struct {
 	UsageUsers         int        `json:"usage_users"`
 	UsageStorageMB     int        `json:"usage_storage_mb"`
 	Notes              string     `json:"notes"`
+	// Ambiente de testing
+	HasTestEnv         bool       `json:"has_test_env" gorm:"default:false"`
+	TestEnvCreatedAt   *time.Time `json:"test_env_created_at"`
+	TestEnvLastSyncAt  *time.Time `json:"test_env_last_sync_at"`
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`
 }

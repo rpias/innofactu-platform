@@ -143,6 +143,16 @@ export const tenants = {
 
   deleteCAERange: (id: string, rangeId: number): Promise<void> =>
     api.delete(`/tenants/${id}/cae-ranges/${rangeId}`).then(() => undefined),
+
+  // Ambiente de Testing
+  createTestEnv: (id: string): Promise<{ message: string; test_slug: string; test_schema: string; synced_at: string }> =>
+    api.post(`/tenants/${id}/test-env`).then((r) => r.data),
+
+  syncTestEnv: (id: string): Promise<{ message: string; synced_at: string }> =>
+    api.post(`/tenants/${id}/test-env/sync`).then((r) => r.data),
+
+  deleteTestEnv: (id: string): Promise<void> =>
+    api.delete(`/tenants/${id}/test-env`).then(() => undefined),
 }
 
 // Support

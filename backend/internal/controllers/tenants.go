@@ -738,6 +738,168 @@ func RegisterTenant(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ── Ambiente de Testing ────────────────────────────────────────────────────────
+
+// callERPPost hace un POST interno al ERP y devuelve el status code y body
+func callERPPost(path string, payload interface{}) (int, []byte, error) {
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequest(http.MethodPost, erpInternalURL()+path, bytes.NewReader(body))
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Key", erpInternalKey())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, respBody, nil
+}
+
+func callERPDelete(path string, payload interface{}) (int, []byte, error) {
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequest(http.MethodDelete, erpInternalURL()+path, bytes.NewReader(body))
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Key", erpInternalKey())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, respBody, nil
+}
+
+// CreateTenantTestEnv — POST /api/tenants/{id}/test-env
+// Provisiona el schema de testing para el tenant.
+func CreateTenantTestEnv(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var tenant models.Tenant
+	if err := database.DB.Preload("Plan").First(&tenant, "id = ?", id).Error; err != nil {
+		http.Error(w, `{"error":"Empresa no encontrada"}`, http.StatusNotFound)
+		return
+	}
+	if tenant.HasTestEnv {
+		http.Error(w, `{"error":"El ambiente de testing ya existe. Usa sync para actualizarlo."}`, http.StatusConflict)
+		return
+	}
+
+	testSlug := tenant.Slug + "-test"
+	testSchema := "t_" + strings.ReplaceAll(testSlug, "-", "_")
+
+	// Provisionar schema de testing en el ERP (reutiliza el endpoint existente)
+	erpPayload := map[string]interface{}{
+		"company_name":   tenant.CompanyName + " [TESTING]",
+		"slug":           testSlug,
+		"schema":         testSchema,
+		"rut":            tenant.RUT,
+		"admin_email":    tenant.AdminEmail,
+		"admin_name":     tenant.AdminName,
+		"plan_code":      tenant.Plan.Code,
+		"status":         "active",
+		"region":         tenant.Region,
+		"timezone":       tenant.Timezone,
+	}
+	statusCode, respBody, err := callERPPost("/provision", erpPayload)
+	if err != nil || statusCode >= 400 {
+		log.Printf("[test-env] ERP provision error: status=%d body=%s err=%v", statusCode, respBody, err)
+		http.Error(w, `{"error":"Error al provisionar ambiente de testing en ERP"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Sincronizar datos maestros de producción → testing
+	syncStatus, syncBody, syncErr := callERPPost("/sync-test", map[string]string{"slug": tenant.Slug})
+	if syncErr != nil || syncStatus >= 400 {
+		log.Printf("[test-env] sync-test warning: status=%d body=%s", syncStatus, syncBody)
+		// No es fatal: el schema fue creado, la sync se puede reintentar
+	}
+
+	// Actualizar flags en Platform DB
+	now := time.Now()
+	database.DB.Model(&tenant).Updates(map[string]interface{}{
+		"has_test_env":          true,
+		"test_env_created_at":   now,
+		"test_env_last_sync_at": now,
+	})
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":    "Ambiente de testing creado",
+		"test_slug":  testSlug,
+		"test_schema": testSchema,
+		"synced_at": now,
+	})
+}
+
+// SyncTenantTestEnv — POST /api/tenants/{id}/test-env/sync
+// Copia los datos maestros de producción al schema de testing.
+func SyncTenantTestEnv(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var tenant models.Tenant
+	if err := database.DB.First(&tenant, "id = ?", id).Error; err != nil {
+		http.Error(w, `{"error":"Empresa no encontrada"}`, http.StatusNotFound)
+		return
+	}
+	if !tenant.HasTestEnv {
+		http.Error(w, `{"error":"El ambiente de testing no existe. Créalo primero."}`, http.StatusBadRequest)
+		return
+	}
+
+	statusCode, respBody, err := callERPPost("/sync-test", map[string]string{"slug": tenant.Slug})
+	if err != nil || statusCode >= 400 {
+		log.Printf("[test-env] sync-test error: status=%d body=%s err=%v", statusCode, respBody, err)
+		http.Error(w, `{"error":"Error al sincronizar datos de testing"}`, http.StatusInternalServerError)
+		return
+	}
+
+	now := time.Now()
+	database.DB.Model(&tenant).Update("test_env_last_sync_at", now)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":   "Sincronización completada",
+		"synced_at": now,
+		"details":   json.RawMessage(respBody),
+	})
+}
+
+// DeleteTenantTestEnv — DELETE /api/tenants/{id}/test-env
+// Elimina el schema de testing y limpia los flags.
+func DeleteTenantTestEnv(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var tenant models.Tenant
+	if err := database.DB.First(&tenant, "id = ?", id).Error; err != nil {
+		http.Error(w, `{"error":"Empresa no encontrada"}`, http.StatusNotFound)
+		return
+	}
+	if !tenant.HasTestEnv {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	testSlug := tenant.Slug + "-test"
+	statusCode, respBody, err := callERPDelete("/drop-schema", map[string]string{"slug": testSlug})
+	if err != nil || (statusCode >= 400 && statusCode != 404) {
+		log.Printf("[test-env] drop-schema error: status=%d body=%s err=%v", statusCode, respBody, err)
+		http.Error(w, `{"error":"Error al eliminar ambiente de testing"}`, http.StatusInternalServerError)
+		return
+	}
+
+	database.DB.Model(&tenant).Updates(map[string]interface{}{
+		"has_test_env":          false,
+		"test_env_created_at":   nil,
+		"test_env_last_sync_at": nil,
+	})
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func TenantRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.Use(AuthRequired)
@@ -761,5 +923,9 @@ func TenantRoutes() chi.Router {
 	r.Post("/{id}/cae-ranges/parse-xml", ParseTenantCAEXML)
 	r.Delete("/{id}/cae-ranges/{rangeId}", DeleteTenantCAERange)
 	r.Get("/{id}/invoice-types", GetTenantInvoiceTypes)
+	// Ambiente de testing
+	r.Post("/{id}/test-env", CreateTenantTestEnv)
+	r.Post("/{id}/test-env/sync", SyncTenantTestEnv)
+	r.Delete("/{id}/test-env", DeleteTenantTestEnv)
 	return r
 }

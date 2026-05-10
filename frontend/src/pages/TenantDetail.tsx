@@ -5,7 +5,7 @@ import { tenants as tenantsApi, plans as plansApi, support as supportApi, erpOri
 import type { Tenant, Plan, SupportTicket, CAERange, CAEParseResult, InvoiceType, MenuItemResolved } from '../types'
 import CertPanel from '../components/CertPanel'
 
-type Tab = 'info' | 'soporte' | 'suscripcion' | 'uso' | 'cert' | 'cae' | 'integraciones' | 'menu'
+type Tab = 'info' | 'soporte' | 'suscripcion' | 'uso' | 'cert' | 'cae' | 'integraciones' | 'menu' | 'testing'
 
 const STATUS_BADGE: Record<string, string> = {
   trial: 'badge-yellow', active: 'badge-green', suspended: 'badge-red', cancelled: 'badge-gray',
@@ -283,13 +283,13 @@ export default function TenantDetail() {
 
       {/* Tabs */}
       <div className="tabs">
-        {(['info', 'soporte', 'suscripcion', 'uso', 'cert', 'cae', 'integraciones', 'menu'] as Tab[]).map((t) => (
+        {(['info', 'soporte', 'suscripcion', 'uso', 'cert', 'cae', 'integraciones', 'menu', 'testing'] as Tab[]).map((t) => (
           <button
             key={t}
             className={`tab-btn ${tab === t ? 'active' : ''}`}
             onClick={() => { setTab(t); if (t === 'cae') loadCAE(); if (t === 'integraciones') loadIntegraciones() }}
           >
-            {t === 'info' ? 'Información' : t === 'soporte' ? 'Soporte' : t === 'suscripcion' ? 'Suscripción' : t === 'uso' ? 'Uso' : t === 'cert' ? '🔐 Certificado DGI' : t === 'cae' ? '⚡ CAE' : t === 'integraciones' ? '🛒 Integraciones' : '🗂️ Menú'}
+            {t === 'info' ? 'Información' : t === 'soporte' ? 'Soporte' : t === 'suscripcion' ? 'Suscripción' : t === 'uso' ? 'Uso' : t === 'cert' ? '🔐 Certificado DGI' : t === 'cae' ? '⚡ CAE' : t === 'integraciones' ? '🛒 Integraciones' : t === 'menu' ? '🗂️ Menú' : '🧪 Testing'}
           </button>
         ))}
       </div>
@@ -932,6 +932,14 @@ export default function TenantDetail() {
         <TenantMenuTab tenantId={id} planCode={tenant.plan?.code ?? ''} />
       )}
 
+      {/* Tab: Testing */}
+      {tab === 'testing' && tenant && (
+        <TestingTab tenant={tenant} onUpdate={() => {
+          // Recargar tenant para reflejar has_test_env actualizado
+          tenantsApi.getOne(tenant.id).then(setTenant)
+        }} />
+      )}
+
       {/* Modal — Show reset credentials */}
       {resetCredentials && (
         <ResetPasswordModal
@@ -1211,6 +1219,172 @@ function TenantMenuTab({ tenantId, planCode }: { tenantId: string; planCode: str
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// ── TestingTab ────────────────────────────────────────────────────────────────
+function TestingTab({ tenant, onUpdate }: { tenant: Tenant; onUpdate: () => void }) {
+  const [loading, setLoading] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [msg, setMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  const testSlug = tenant.slug + '-test'
+
+  const fmt = (d: string | null) => {
+    if (!d) return '—'
+    return new Date(d).toLocaleString('es-UY', { dateStyle: 'short', timeStyle: 'short' })
+  }
+
+  const handleCreate = async () => {
+    setLoading(true); setMsg(null)
+    try {
+      await tenantsApi.createTestEnv(tenant.id)
+      setMsg({ type: 'ok', text: 'Ambiente de testing creado y sincronizado correctamente.' })
+      onUpdate()
+    } catch (e: any) {
+      setMsg({ type: 'err', text: e?.response?.data?.error ?? 'Error al crear el ambiente de testing.' })
+    } finally { setLoading(false) }
+  }
+
+  const handleSync = async () => {
+    setSyncing(true); setMsg(null)
+    try {
+      await tenantsApi.syncTestEnv(tenant.id)
+      setMsg({ type: 'ok', text: 'Datos sincronizados desde producción correctamente.' })
+      onUpdate()
+    } catch (e: any) {
+      setMsg({ type: 'err', text: e?.response?.data?.error ?? 'Error al sincronizar.' })
+    } finally { setSyncing(false) }
+  }
+
+  const handleDelete = async () => {
+    setDeleting(true); setMsg(null)
+    try {
+      await tenantsApi.deleteTestEnv(tenant.id)
+      setMsg({ type: 'ok', text: 'Ambiente de testing eliminado.' })
+      setShowDeleteConfirm(false)
+      onUpdate()
+    } catch (e: any) {
+      setMsg({ type: 'err', text: e?.response?.data?.error ?? 'Error al eliminar.' })
+    } finally { setDeleting(false) }
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="detail-section">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <span style={{ fontSize: '1.3rem' }}>🧪</span>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Ambiente de Testing</h3>
+            <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+              Copia aislada del entorno de producción para probar cambios sin afectar datos reales.
+            </p>
+          </div>
+        </div>
+
+        {msg && (
+          <div style={{
+            padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: '0.84rem',
+            background: msg.type === 'ok' ? '#d1fae5' : '#fee2e2',
+            color: msg.type === 'ok' ? '#065f46' : '#991b1b',
+            border: `1px solid ${msg.type === 'ok' ? '#6ee7b7' : '#fca5a5'}`,
+          }}>
+            {msg.text}
+          </div>
+        )}
+
+        {!tenant.has_test_env ? (
+          // Estado: no existe
+          <div style={{ textAlign: 'center', padding: '32px 16px' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>🚫</div>
+            <p style={{ fontWeight: 500, marginBottom: 8 }}>No hay ambiente de testing configurado</p>
+            <p style={{ fontSize: '0.83rem', color: 'var(--text-muted)', marginBottom: 20, maxWidth: 400, margin: '0 auto 20px' }}>
+              Al crear el ambiente se provisionará el schema <strong>{testSlug}</strong> con los datos
+              maestros de producción (artículos, contactos, tipos de comprobante, etc.).
+              Los datos transaccionales (facturas, movimientos) no se copian.
+            </p>
+            <button className="btn btn-primary" onClick={handleCreate} disabled={loading}>
+              {loading ? 'Creando...' : '✨ Crear ambiente de testing'}
+            </button>
+          </div>
+        ) : (
+          // Estado: existe
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 20 }}>
+              <div className="stat-card" style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '1.5rem', marginBottom: 4 }}>✅</div>
+                <div className="stat-label">Estado</div>
+                <div style={{ fontWeight: 600, color: '#059669' }}>Activo</div>
+              </div>
+              <div className="stat-card" style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '1.5rem', marginBottom: 4 }}>📅</div>
+                <div className="stat-label">Creado</div>
+                <div style={{ fontWeight: 500, fontSize: '0.85rem' }}>{fmt(tenant.test_env_created_at)}</div>
+              </div>
+              <div className="stat-card" style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '1.5rem', marginBottom: 4 }}>🔄</div>
+                <div className="stat-label">Último sync</div>
+                <div style={{ fontWeight: 500, fontSize: '0.85rem' }}>{fmt(tenant.test_env_last_sync_at)}</div>
+              </div>
+            </div>
+
+            <div style={{ background: 'var(--input-bg)', border: '1px solid var(--input-border)', borderRadius: 8, padding: '12px 16px', marginBottom: 20 }}>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Acceso al ambiente de testing</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.83rem' }}>Empresa (slug):</span>
+                <code style={{ background: 'var(--sidebar-bg)', padding: '2px 8px', borderRadius: 4, fontSize: '0.85rem', fontWeight: 600 }}>{testSlug}</code>
+                <span style={{ fontSize: '0.83rem', color: 'var(--text-muted)' }}>— mismo email y contraseña de producción</span>
+              </div>
+            </div>
+
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', fontSize: '0.82rem', color: '#92400e', marginBottom: 20 }}>
+              <strong>⚠ Importante:</strong> La sincronización <strong>reemplaza</strong> todos los datos maestros del testing con los de producción.
+              Los datos transaccionales del testing (facturas de prueba, movimientos) <strong>no se afectan</strong>.
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button className="btn btn-primary" onClick={handleSync} disabled={syncing}>
+                {syncing ? 'Sincronizando...' : '🔄 Sincronizar desde producción'}
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={() => setShowDeleteConfirm(true)}
+                style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5' }}
+                disabled={deleting}
+              >
+                🗑️ Eliminar ambiente de testing
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Confirm delete modal */}
+      {showDeleteConfirm && (
+        <div className="modal-overlay" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+            <h3 style={{ marginTop: 0 }}>¿Eliminar ambiente de testing?</h3>
+            <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+              Se eliminará el schema <strong>{testSlug}</strong> y todos sus datos.
+              Esta acción <strong>no se puede deshacer</strong>.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+              <button className="btn btn-secondary" onClick={() => setShowDeleteConfirm(false)}>Cancelar</button>
+              <button
+                className="btn"
+                style={{ background: '#ef4444', color: '#fff' }}
+                onClick={handleDelete}
+                disabled={deleting}
+              >
+                {deleting ? 'Eliminando...' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

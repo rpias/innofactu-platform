@@ -43,6 +43,9 @@ export interface Tenant {
   usage_users: number
   usage_storage_mb: number
   notes: string
+  has_test_env: boolean
+  test_env_created_at: string | null
+  test_env_last_sync_at: string | null
   created_at: string
   updated_at: string
 }
