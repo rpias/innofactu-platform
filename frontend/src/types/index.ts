@@ -153,6 +153,15 @@ export interface CertStatus {
   uploaded_by?: string
 }
 
+// Estado resumido del cert por tenant (lista de empresas)
+export interface TenantCertStatus {
+  schema: string
+  has_cert: boolean
+  expiry_status: 'none' | 'ok' | 'warning' | 'critical' | 'expired'
+  days_until_expiry: number
+  expiry_date?: string
+}
+
 export interface CertHistoryEntry {
   ID: number
   CreatedAt: string

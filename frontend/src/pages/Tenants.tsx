@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Building2, CheckCircle, Copy, Plus, Search, XCircle } from 'lucide-react'
+import { Building2, CheckCircle, Copy, Plus, Search, XCircle, ShieldAlert, ShieldOff } from 'lucide-react'
 import api, { tenants as tenantsApi, plans as plansApi } from '../services/api'
-import type { Tenant, Plan } from '../types'
+import type { Tenant, Plan, TenantCertStatus } from '../types'
 
 /**
  * Validación de RUT uruguayo — algoritmo oficial DGI módulo 11.
@@ -54,9 +54,32 @@ function timeAgo(dateStr: string) {
   return `hace ${days}d`
 }
 
+// Distintivo de certificado DGI según su estado de vencimiento
+function CertBadge({ cs }: { cs?: TenantCertStatus }) {
+  if (!cs || !cs.has_cert) {
+    return <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Sin cert.</span>
+  }
+  if (cs.expiry_status === 'expired') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', fontWeight: 700, color: '#dc2626', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '2px 7px' }}>
+        <ShieldOff size={12} /> Vencido
+      </span>
+    )
+  }
+  if (cs.expiry_status === 'critical' || cs.expiry_status === 'warning') {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '0.72rem', fontWeight: 700, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '2px 7px' }}>
+        <ShieldAlert size={12} /> Vence en {cs.days_until_expiry}d
+      </span>
+    )
+  }
+  return <span style={{ fontSize: '0.72rem', color: '#059669' }}>Vigente</span>
+}
+
 export default function Tenants() {
   const [list, setList] = useState<Tenant[]>([])
   const [planList, setPlanList] = useState<Plan[]>([])
+  const [certStatus, setCertStatus] = useState<Record<string, TenantCertStatus>>({})
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -75,6 +98,7 @@ export default function Tenants() {
 
   useEffect(() => {
     plansApi.getAll().then(setPlanList)
+    tenantsApi.getAllCertStatus().then(setCertStatus).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -121,6 +145,7 @@ export default function Tenants() {
                 <th>RUT</th>
                 <th>Plan</th>
                 <th>Estado</th>
+                <th>Certificado</th>
                 <th>Usuarios</th>
                 <th>Facturas/mes</th>
                 <th>Registro</th>
@@ -128,10 +153,10 @@ export default function Tenants() {
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>Cargando...</td></tr>
+                <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>Cargando...</td></tr>
               )}
               {!loading && list.length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>Sin resultados</td></tr>
+                <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>Sin resultados</td></tr>
               )}
               {!loading && list.map((t) => (
                 <tr
@@ -144,6 +169,7 @@ export default function Tenants() {
                   <td style={{ color: 'var(--text-secondary)' }}>{t.rut || '—'}</td>
                   <td style={{ color: 'var(--text-secondary)' }}>{t.plan?.name ?? '—'}</td>
                   <td><span className={`badge ${STATUS_BADGE[t.status]}`}>{STATUS_LABEL[t.status]}</span></td>
+                  <td><CertBadge cs={certStatus[t.id]} /></td>
                   <td style={{ color: 'var(--text-secondary)' }}>{t.usage_users}</td>
                   <td style={{ color: 'var(--text-secondary)' }}>{t.usage_invoices_month}</td>
                   <td style={{ color: 'var(--text-muted)' }}>{timeAgo(t.created_at)}</td>

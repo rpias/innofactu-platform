@@ -386,6 +386,53 @@ func ResetAdminPassword(w http.ResponseWriter, r *http.Request) {
 
 // ── Certificado DGI (proxies al ERP interno) ─────────────────────────────────
 
+// certStatusAll es el shape de cada item devuelto por el ERP /internal/cert/status-all.
+type certStatusAll struct {
+	Schema          string `json:"schema"`
+	HasCert         bool   `json:"has_cert"`
+	ExpiryStatus    string `json:"expiry_status"` // none|ok|warning|critical|expired
+	DaysUntilExpiry int    `json:"days_until_expiry"`
+	ExpiryDate      string `json:"expiry_date"`
+}
+
+// GetTenantsCertStatus devuelve un mapa tenant_id → estado del cert,
+// consultando el ERP una sola vez. Se usa para mostrar distintivos en la lista.
+// GET /api/tenants/cert-status
+func GetTenantsCertStatus(w http.ResponseWriter, r *http.Request) {
+	req, _ := http.NewRequest("GET", erpInternalURL()+"/cert/status-all", nil)
+	req.Header.Set("X-Internal-Key", erpInternalKey())
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, `{"error":"error al contactar ERP"}`, http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	var list []certStatusAll
+	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		http.Error(w, `{"error":"respuesta ERP inválida"}`, http.StatusBadGateway)
+		return
+	}
+	bySchema := make(map[string]certStatusAll, len(list))
+	for _, c := range list {
+		bySchema[c.Schema] = c
+	}
+
+	var tenants []models.Tenant
+	database.DB.Find(&tenants)
+
+	out := make(map[string]certStatusAll, len(tenants))
+	for _, t := range tenants {
+		schema := "t_" + strings.ReplaceAll(t.Slug, "-", "_")
+		if cs, ok := bySchema[schema]; ok {
+			out[t.ID] = cs
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(out)
+}
+
 // GetTenantCert devuelve el estado del cert de un tenant vía ERP interno.
 func GetTenantCert(w http.ResponseWriter, r *http.Request) {
 	tenantID := chi.URLParam(r, "id")
@@ -906,6 +953,7 @@ func TenantRoutes() chi.Router {
 	r.Get("/", GetTenants)
 	r.Post("/", CreateTenant)
 	r.Get("/stats", GetTenantStats)
+	r.Get("/cert-status", GetTenantsCertStatus)
 	r.Get("/{id}", GetTenant)
 	r.Put("/{id}", UpdateTenant)
 	r.Post("/{id}/suspend", SuspendTenant)

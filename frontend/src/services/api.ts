@@ -7,6 +7,7 @@ import type {
   SupportTicket,
   SupportMessage,
   TenantStats,
+  TenantCertStatus,
   TicketStats,
   DashboardStats,
   CertStatus,
@@ -95,6 +96,10 @@ export const tenants = {
 
   getStats: (): Promise<TenantStats> =>
     api.get('/tenants/stats').then((r) => r.data),
+
+  // Estado del certificado DGI de todos los tenants (mapa tenant_id → estado)
+  getAllCertStatus: (): Promise<Record<string, TenantCertStatus>> =>
+    api.get('/tenants/cert-status').then((r) => r.data),
 
   resetAdminPassword: (id: string): Promise<{ email: string; password: string; note: string }> =>
     api.post(`/tenants/${id}/reset-admin-password`).then((r) => r.data),
