@@ -404,6 +404,7 @@ func seedMenuItems() {
 		{Key: "currencies", Label: "Organizar Divisas", Icon: "DollarSign", Path: "/currencies", Section: "herramientas", SectionLabel: "Herramientas", SortOrder: 41, DefaultRoles: `["admin"]`},
 		{Key: "import", Label: "Importar / Exportar", Icon: "FileSpreadsheet", Path: "/import", Section: "herramientas", SectionLabel: "Herramientas", SortOrder: 42, ReqFeature: "api_access", DefaultRoles: `["admin"]`},
 		{Key: "efactura", Label: "e-Factura DGI", Icon: "Zap", Path: "/efactura", Section: "herramientas", SectionLabel: "Herramientas", SortOrder: 43, ReqFeature: "efactura", DefaultRoles: `["admin"]`},
+		{Key: "iva", Label: "Liquidación IVA", Icon: "Percent", Path: "/iva", Section: "herramientas", SectionLabel: "Herramientas", SortOrder: 44, DefaultRoles: `["admin"]`},
 		{Key: "integraciones", Label: "Integraciones E-Commerce", Icon: "Globe", Path: "/integraciones", Section: "herramientas", SectionLabel: "Herramientas", SortOrder: 44, DefaultRoles: `["admin"]`},
 		{Key: "settings", Label: "Configuración", Icon: "Settings", Path: "/settings", Section: "herramientas", SectionLabel: "Herramientas", SortOrder: 45, DefaultRoles: `["admin"]`},
 	}
@@ -449,7 +450,7 @@ func seedMenuItems() {
 		"stock-variants-report": true,
 		"accounting": false, "reports": false, "contacts": true, "users": true,
 		"price-lists": false, "currencies": true, "import": false,
-		"efactura": true, "integraciones": false, "settings": true,
+		"efactura": true, "integraciones": false, "settings": true, "iva": true,
 	}
 	// profesional: todo excepto nada (acceso completo)
 	profesional := map[string]bool{
@@ -459,7 +460,7 @@ func seedMenuItems() {
 		"stock-variants-report": true,
 		"accounting": true, "reports": true, "contacts": true, "users": true,
 		"price-lists": true, "currencies": true, "import": true,
-		"efactura": true, "integraciones": true, "settings": true,
+		"efactura": true, "integraciones": true, "settings": true, "iva": true,
 	}
 	// empresarial: igual a profesional (acceso completo)
 	empresarial := profesional
